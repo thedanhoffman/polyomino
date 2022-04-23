@@ -73,6 +73,30 @@ impl PolyominoGridEdge {
                 }
             }
             rgns.sort();
+            
+            let mut short_regions = pges.size_of.iter().filter(|rgn| {
+                pges.size_of[**rgn as usize] >= MAX_PIECE
+            }).collect::<Vec<_>>();
+           
+            short_regions.sort();
+
+            let b = self.stamp_bits;
+            let p = self.piece_bits;
+            let mut stamp = 0;
+
+            // encode adjacencies
+            for ix in (-1 as i64..(short_regions.len() - 2) as i64).rev() {
+                // the python code does this with xrange but this should be the same range, right?
+                let rgn1 = short_regions[ix as usize];
+                for iy in (-1 as i64..(short_regions.len() - 1) as i64).rev() {
+                    let rgn2 = short_regions[iy as usize];
+                    stamp <<= 1;
+                    if pges.adjacent[(rgn1 + rgn2) as usize] { // ???
+                        stamp += 1;
+                    }
+                }
+            }
+
             todo!()
         } else {
             unreachable!()
