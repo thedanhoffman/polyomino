@@ -1,55 +1,51 @@
-
+const MAX_PIECE: i32 = 5;
+const MIN_PIECE: i32 = 5;
+const NUM_ROWS: usize = 5;
+const NUM_COLS: usize = 5;
+const COLUMN_STEP: i32 = NUM_COLS as i32;
+const CACHE_LIMIT: i32 = 0;
+const BACKTRACK: bool = false;
+const PROGRESS: bool = false;
+ 
 struct PolyominoGridEdgeStamp {
     col: i32,
-    regions: Vec<u8>,
-    size_of: u128,
-    adjacent: u128
+    regions: Vec<i8>,
+    size_of: [i32; (MAX_PIECE * MIN_PIECE) as usize],
+    adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize]
 }
 struct PolyominoGridEdge {
     // from __init__
     pges: Option<PolyominoGridEdgeStamp>,
 
     // from set_space
-    num_cols: usize,
-    min_piece: i32,
-    max_piece: i32,
     stamp_bits: i32,
     piece_bits: i32
 }
 
 impl PolyominoGridEdge {
     fn new(
-        num_cols: usize, 
-        min_piece: i32, 
-        max_piece: i32, 
+        pges: Option<PolyominoGridEdgeStamp>
     ) -> Self {
-        assert![min_piece >= 2];
-        assert![max_piece >= min_piece];
-        assert![num_cols >= 1 && num_cols <= 25];
-
         Self {
-            num_cols,
-            min_piece,
-            max_piece,
-            stamp_bits: if num_cols < 4 {
+            stamp_bits: if NUM_COLS < 4 {
                 2
-            } else if num_cols < 8 {
+            } else if NUM_COLS < 8 {
                 3
-            } else if num_cols < 16 {
+            } else if NUM_COLS < 16 {
                 4
             } else {
                 5
             },
-            piece_bits: if max_piece < 4 {
+            piece_bits: if MAX_PIECE < 4 {
                 2
-            } else if max_piece < 8 {
+            } else if MAX_PIECE < 8 {
                 3
-            } else if max_piece < 16 {
+            } else if MAX_PIECE < 16 {
                 4
             } else {
                 5
             },
-            pges: None
+            pges
         }
     }
 
@@ -59,32 +55,25 @@ impl PolyominoGridEdge {
 }
 
 fn main() {
-    const max_piece: i32 = 5;
-    const min_piece: i32 = 5;
-    const num_rows: usize = 5;
-    const num_cols: usize = 5;
-    const column_step: i32 = num_cols as i32;
-    const cache_limit: i32 = 0;
-    const backtrack: bool = false;
-    const progress: bool = false;
-    
+    assert![MIN_PIECE >= 2];
+    assert![MAX_PIECE >= MIN_PIECE];
+    assert![NUM_COLS >= 1 && NUM_COLS <= 25];
+
     let mut pge = PolyominoGridEdge::new(
-        num_cols,
-        max_piece,
-        min_piece
+        None
     );
 
     #[derive(Default)]
     struct PolyominoStateToExpansion {};
 
-    let mut state_to_expansion: [PolyominoStateToExpansion; num_cols];
+    let mut state_to_expansion: [PolyominoStateToExpansion; NUM_COLS];
     
     let mut num_cached_states = 0;
     let mut expansion_cnt = 0;
     let mut expansion_len = 0;
 
     let mut initial_states = {
-        let mut num_walls = num_cols - 1;
+        let mut num_walls = NUM_COLS - 1;
         let mut state_to_ways: Vec<u8> = Vec::new();
 
         for mut wall_bits in 0..(1 << num_walls) {
@@ -105,8 +94,8 @@ fn main() {
             };
 
             let mut regions: Vec<i8> = Vec::new();
-            let mut size_of = [0; (max_piece * min_piece) as usize];
-            let mut adjacent = [false; (max_piece * min_piece) as usize];
+            let mut size_of = [0; (MAX_PIECE * MIN_PIECE) as usize];
+            let mut adjacent = [false; (MAX_PIECE * MIN_PIECE) as usize];
 
             let mut num = 0;
             let mut rgn = 'A' as i8 + num;
@@ -115,11 +104,11 @@ fn main() {
             // size_of[rgn] = 1;
             let mut region_too_big = false;
         
-            for col in 1..num_cols {
+            for col in 1..NUM_COLS {
                 if wall_bits & 1 == 0 {
                     regions[col] = rgn;
                     size_of[rgn as usize] += 1;
-                    if size_of[rgn as usize] > max_piece {
+                    if size_of[rgn as usize] > MAX_PIECE {
                         region_too_big = true;
                         break;
                     }
@@ -137,6 +126,17 @@ fn main() {
 
                 wall_bits >>= 1;
             }
+
+            if region_too_big {
+                continue;
+            }
+
+            let state = PolyominoGridEdge::new(
+                Some(PolyominoGridEdgeStamp {
+                    col: 0,
+                    regions, size_of, adjacent
+                })
+            );
         }
         todo!()
     };
