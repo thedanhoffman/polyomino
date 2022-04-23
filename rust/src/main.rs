@@ -12,7 +12,9 @@ struct PolyominoGridEdgeStamp {
     col: i32,
     regions: Vec<i8>,
     size_of: [i32; (MAX_PIECE * MIN_PIECE) as usize],
-    adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize]
+    adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize],
+
+    stamp_val: Option<i32>
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -97,6 +99,20 @@ impl PolyominoGridEdge {
                 }
             }
 
+            // encode sizes
+            for ix in (-1 as i64..(short_regions.len() - 1) as i64).rev() {
+                stamp = (stamp << p) + pges.size_of[rgns[ix as usize] as usize];
+            }
+
+            // encode regions
+            for ix in (0..NUM_COLS-1).rev() {
+                stamp = (stamp << b) + pges.regions[ix] as i32 - 'A' as i32;
+            }
+
+            // encode col
+            stamp = (stamp << b) + pges.col;
+
+            pges.stamp_val = Some(stamp);
             todo!()
         } else {
             unreachable!()
@@ -184,7 +200,8 @@ fn main() {
             let mut state = PolyominoGridEdge::new(
                 Some(PolyominoGridEdgeStamp {
                     col: 0,
-                    regions, size_of, adjacent
+                    regions, size_of, adjacent,
+                    stamp_val: None
                 })
             );
 
