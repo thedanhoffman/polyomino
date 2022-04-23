@@ -6,20 +6,23 @@ const COLUMN_STEP: i32 = NUM_COLS as i32;
 const CACHE_LIMIT: i32 = 0;
 const BACKTRACK: bool = false;
 const PROGRESS: bool = false;
- 
+
+#[derive(Eq, PartialEq, Hash)]
 struct PolyominoGridEdgeStamp {
     col: i32,
     regions: Vec<i8>,
     size_of: [i32; (MAX_PIECE * MIN_PIECE) as usize],
     adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize]
 }
+
+#[derive(Eq, PartialEq, Hash)]
 struct PolyominoGridEdge {
     // from __init__
     pges: Option<PolyominoGridEdgeStamp>,
 
     // from set_space
     stamp_bits: i32,
-    piece_bits: i32
+    piece_bits: i32,
 }
 
 impl PolyominoGridEdge {
@@ -52,6 +55,29 @@ impl PolyominoGridEdge {
     fn from_stamp() -> Self {
         todo!()
     }
+
+    fn stamp(&mut self) -> ! {
+        //if !self.stamped {
+        if true {
+            self.be_stamped();
+        }
+        todo!()
+    }
+
+    fn be_stamped(&mut self) -> ! {
+        if let Some(ref mut pges) = self.pges.as_mut() {
+            let mut rgns = Vec::new();
+            for rgn in pges.regions.iter() {
+                if !rgns.contains(rgn) {
+                    rgns.push(rgn.clone());
+                }
+            }
+            rgns.sort();
+            todo!()
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 fn main() {
@@ -74,7 +100,7 @@ fn main() {
 
     let mut initial_states = {
         let mut num_walls = NUM_COLS - 1;
-        let mut state_to_ways: Vec<u8> = Vec::new();
+        let mut state_to_ways = std::collections::HashMap::new();
 
         for mut wall_bits in 0..(1 << num_walls) {
             let rev_bits = {
@@ -131,12 +157,17 @@ fn main() {
                 continue;
             }
 
-            let state = PolyominoGridEdge::new(
+            let mut state = PolyominoGridEdge::new(
                 Some(PolyominoGridEdgeStamp {
                     col: 0,
                     regions, size_of, adjacent
                 })
             );
+
+            // NOTE: might be worth it to fix this line...
+            // assert![state_to_ways.contains_key(&state) == false];
+            
+            state_to_ways.insert(state.stamp(), ways);
         }
         todo!()
     };
