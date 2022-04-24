@@ -82,9 +82,6 @@ impl PolyominoGridEdge {
             let p = self.piece_bits;
             let mut stamp: i32 = 0;
 
-            println!("short_regions: {:#?}", &short_regions);
-            println!("regions: {:#?}", &pges.size_of);
-
             // encode adjacencies
             // NOTE: this has a negative index in the beginning of the for loop, that's
             // obviously wrong but not sure hwo to fix that...
@@ -191,7 +188,6 @@ fn main() {
                     // they using addition as a non-commutative operator???
                    
                     let rgn_w_idx = (rgn + w) as usize;
-                    println!("rgn: {}, w: {}", rgn, w);
                     adjacent[rgn_w_idx] = true;
                 }
 
@@ -211,10 +207,12 @@ fn main() {
             );
 
             // NOTE: might be worth it to fix this line...
-            // assert![state_to_ways.contains_key(&state) == false];
+            assert![state_to_ways.contains_key(&state.stamp()) == false];
             
             state_to_ways.insert(state.stamp(), ways);
         }
+
+        state_to_ways
     };
 
     println!("initial states: {:#?}", &initial_states);
