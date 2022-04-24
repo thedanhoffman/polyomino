@@ -7,17 +7,17 @@ const CACHE_LIMIT: i32 = 0;
 const BACKTRACK: bool = false;
 const PROGRESS: bool = false;
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq)]
 struct PolyominoGridEdgeStamp {
     col: i32,
     regions: [i8; NUM_COLS as usize],
     size_of: [i32; (MAX_PIECE * MIN_PIECE) as usize],
-    adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize],
+    adjacent: std::collections::HashSet<[i8; 2]>,
 
     stamp_val: Option<i32>
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq)]
 struct PolyominoGridEdge {
     // from __init__
     pges: Option<PolyominoGridEdgeStamp>,
@@ -54,7 +54,79 @@ impl PolyominoGridEdge {
         }
     }
 
-    fn from_stamp() -> Self {
+    fn trapped(&self, rgn_ix: i32, rgn: i8) -> bool {
+        todo!()
+    }
+
+    fn expand(&self) -> ! {
+        if let Some(ref pges) = self.pges.as_ref() {
+            let s: (_, _) = (pges.col, pges.regions[pges.col as usize]);
+            let w: (_, _) = if pges.col > 0 {
+                (Some(pges.col - 1), Some(pges.regions[(pges.col - 1) as usize]))
+            } else {
+                (None, None)
+            };
+            let s_size = pges.size_of[s.1 as usize];
+
+            let mut walls: Vec<String> = Vec::new();
+            if pges.col == 0 {
+                // at the west end
+                if s_size == MAX_PIECE {
+                    walls.push("|-".to_owned());
+                } else if s_size < MIN_PIECE && self.trapped(s.0, s.1) {
+                    walls.push("|.".to_owned());
+                } else {
+                    walls.push("|-".to_owned());
+                    walls.push("|.".to_owned());
+                }
+            } else if s.1 == w.1.unwrap() {
+                // new cell must connect both/neither
+                if s_size == MAX_PIECE {
+                    walls.push("|-".to_owned());
+                } else {
+                    walls.push("|-".to_owned());
+                    walls.push("..".to_owned());
+                }
+            } else {
+                let w_size = pges.size_of[w.1.unwrap() as usize];
+                let mut w_walls = Vec::new();
+                let mut n_walls = Vec::new();
+
+                if w_size == MAX_PIECE {
+                    w_walls.push("|".to_owned());
+                } else {
+                    w_walls.push("|".to_owned());
+                    w_walls.push(".".to_owned());
+                }
+
+                if s_size == MAX_PIECE {
+                    n_walls.push("-".to_owned());
+                } else if s_size < MIN_PIECE && self.trapped(s.0, s.1) {
+                    n_walls.push(".".to_owned());
+                } else {
+                    n_walls.push("-".to_owned());
+                    n_walls.push(".".to_owned());
+                }
+
+                let cant_merge = pges.adjacent.iter().any(|x| x[0] == w.1.unwrap() && x[1] == s.1) || (s_size + w_size > MAX_PIECE);
+                for w_wall in w_walls.iter() {
+                    for n_wall in n_walls.iter() {
+                        let wall = format!["{}{}", w_wall, n_wall];
+                        if cant_merge && wall == ".." {
+                            continue;
+                        }
+                        walls.push(wall);
+                    }
+                }
+            }
+
+            todo!()
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn from_stamp(stamp: i32) -> Self {
         todo!()
     }
 
@@ -93,7 +165,7 @@ impl PolyominoGridEdge {
                 for iy in (ix as i64..(short_regions.len() - 1) as i64).rev() {
                     let rgn2 = short_regions[iy as usize];
                     stamp <<= 1;
-                    if pges.adjacent[(rgn1 + rgn2) as usize] { // ???
+                    if pges.adjacent.iter().any(|x| x[0] == *rgn1 as i8 && x[1] == *rgn2 as i8) {
                         stamp += 1;
                     }
                 }
@@ -130,7 +202,7 @@ fn main() {
     );
 
     #[derive(Default)]
-    struct PolyominoStateToExpansion {};
+    struct PolyominoStateToExpansion {}
 
     let mut state_to_expansion: [PolyominoStateToExpansion; NUM_COLS];
     
@@ -138,7 +210,7 @@ fn main() {
     let mut expansion_cnt = 0;
     let mut expansion_len = 0;
 
-    let mut initial_states = {
+    let mut wave = {
         let mut num_walls = NUM_COLS - 1;
         let mut state_to_ways = std::collections::HashMap::new();
 
@@ -161,7 +233,7 @@ fn main() {
 
             let mut regions = [0; NUM_COLS];
             let mut size_of = [0; (MAX_PIECE * MIN_PIECE) as usize];
-            let mut adjacent = [false; (MAX_PIECE * MIN_PIECE) as usize];
+            let mut adjacent = std::collections::HashSet::new();
 
             let mut num = 0;
             let mut rgn = num as i8;
@@ -184,11 +256,9 @@ fn main() {
                     rgn = num as i8;
                     regions[col] = rgn;
                     size_of[rgn as usize] = 1;
-                    // WAIT A MINUTE this is as-written in the Python code, are
-                    // they using addition as a non-commutative operator???
-                   
-                    let rgn_w_idx = (rgn + w) as usize;
-                    adjacent[rgn_w_idx] = true;
+
+                    adjacent.insert([rgn, w]);
+                    adjacent.insert([w, rgn]);
                 }
 
                 wall_bits >>= 1;
@@ -215,5 +285,34 @@ fn main() {
         state_to_ways
     };
 
-    println!("initial states: {:#?}", &initial_states);
+    for row in 0..NUM_ROWS {
+        for col in 0..NUM_COLS {
+            let new_wave = std::collections::HashMap::new();
+            let mut expansions = todo!();
+
+            for state in wave.values() {
+                if todo!() {
+                    expansions = todo!();
+                } else {
+                    let edge = PolyominoGridEdge::from_stamp(*state);
+                    if COLUMN_STEP == 1 {
+                        expansions = edge.expand(/* asStamps=True, withWalls=backtrack */);
+                    } else {
+                        todo!(); // don't bother with more than one step at a time for now
+                    }
+
+                    // don't bother with the cache either
+                }
+
+                if BACKTRACK { // backtrack
+                    todo!();
+                }
+
+                let ways = wave[state];
+                for state_ in 0..0 {
+                    *new_wave.entry(state).or_insert(0) += ways;
+                }
+            }
+        }
+    }
 }
