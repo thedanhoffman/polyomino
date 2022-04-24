@@ -10,7 +10,7 @@ const PROGRESS: bool = false;
 #[derive(Eq, PartialEq, Hash)]
 struct PolyominoGridEdgeStamp {
     col: i32,
-    regions: Vec<i8>,
+    regions: [i8; NUM_COLS as usize],
     size_of: [i32; (MAX_PIECE * MIN_PIECE) as usize],
     adjacent: [bool; (MAX_PIECE * MIN_PIECE) as usize],
 
@@ -58,16 +58,12 @@ impl PolyominoGridEdge {
         todo!()
     }
 
-    fn stamp(&mut self) -> ! {
-        //if !self.stamped {
-        if true {
-            self.be_stamped();
-        }
-        todo!()
+    fn stamp(&self) -> i32 {
+        self.be_stamped()
     }
 
-    fn be_stamped(&mut self) -> ! {
-        if let Some(ref mut pges) = self.pges.as_mut() {
+    fn be_stamped(&self) -> i32 {
+        if let Some(ref pges) = self.pges.as_ref() {
             let mut rgns = Vec::new();
             for rgn in pges.regions.iter() {
                 if !rgns.contains(rgn) {
@@ -77,20 +73,27 @@ impl PolyominoGridEdge {
             rgns.sort();
             
             let mut short_regions = pges.size_of.iter().filter(|rgn| {
-                pges.size_of[**rgn as usize] >= MAX_PIECE
+                pges.size_of[**rgn as usize] < MAX_PIECE
             }).collect::<Vec<_>>();
            
             short_regions.sort();
 
             let b = self.stamp_bits;
             let p = self.piece_bits;
-            let mut stamp = 0;
+            let mut stamp: i32 = 0;
+
+            println!("short_regions: {:#?}", &short_regions);
+            println!("regions: {:#?}", &pges.size_of);
 
             // encode adjacencies
-            for ix in (-1 as i64..(short_regions.len() - 2) as i64).rev() {
+            // NOTE: this has a negative index in the beginning of the for loop, that's
+            // obviously wrong but not sure hwo to fix that...
+
+            if short_regions.len() >= 2 {
+            for ix in (0 as i64..(short_regions.len() - 2) as i64).rev() {
                 // the python code does this with xrange but this should be the same range, right?
                 let rgn1 = short_regions[ix as usize];
-                for iy in (-1 as i64..(short_regions.len() - 1) as i64).rev() {
+                for iy in (ix as i64..(short_regions.len() - 1) as i64).rev() {
                     let rgn2 = short_regions[iy as usize];
                     stamp <<= 1;
                     if pges.adjacent[(rgn1 + rgn2) as usize] { // ???
@@ -98,22 +101,22 @@ impl PolyominoGridEdge {
                     }
                 }
             }
+            }
 
             // encode sizes
-            for ix in (-1 as i64..(short_regions.len() - 1) as i64).rev() {
+            for ix in (0 as i64..(rgns.len() - 1) as i64).rev() {
                 stamp = (stamp << p) + pges.size_of[rgns[ix as usize] as usize];
             }
 
             // encode regions
             for ix in (0..NUM_COLS-1).rev() {
-                stamp = (stamp << b) + pges.regions[ix] as i32 - 'A' as i32;
+                stamp = (stamp << b) + pges.regions[ix] as i32;
             }
 
             // encode col
             stamp = (stamp << b) + pges.col;
 
-            pges.stamp_val = Some(stamp);
-            todo!()
+            stamp
         } else {
             unreachable!()
         }
@@ -159,15 +162,15 @@ fn main() {
                 2
             };
 
-            let mut regions: Vec<i8> = Vec::new();
+            let mut regions = [0; NUM_COLS];
             let mut size_of = [0; (MAX_PIECE * MIN_PIECE) as usize];
             let mut adjacent = [false; (MAX_PIECE * MIN_PIECE) as usize];
 
             let mut num = 0;
-            let mut rgn = 'A' as i8 + num;
-            regions.push(rgn);
-        
-            // size_of[rgn] = 1;
+            let mut rgn = num as i8;
+            regions[0] = rgn;
+            size_of[rgn as usize] = 1;
+            
             let mut region_too_big = false;
         
             for col in 1..NUM_COLS {
@@ -181,13 +184,15 @@ fn main() {
                 } else {
                     let w = rgn;
                     num += 1;
-                    rgn = 'A' as i8 + num;
+                    rgn = num as i8;
                     regions[col] = rgn;
                     size_of[rgn as usize] = 1;
                     // WAIT A MINUTE this is as-written in the Python code, are
                     // they using addition as a non-commutative operator???
-                    adjacent[(rgn+w) as usize] = true;
-                    adjacent[(w+rgn) as usize] = true;
+                   
+                    let rgn_w_idx = (rgn + w) as usize;
+                    println!("rgn: {}, w: {}", rgn, w);
+                    adjacent[rgn_w_idx] = true;
                 }
 
                 wall_bits >>= 1;
@@ -210,6 +215,7 @@ fn main() {
             
             state_to_ways.insert(state.stamp(), ways);
         }
-        todo!()
     };
+
+    println!("initial states: {:#?}", &initial_states);
 }
