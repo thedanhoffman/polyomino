@@ -25,7 +25,7 @@ mod tests {
             if n == 0 {
                 0
             } else {
-                d(n-1)
+                d(n-1) + g(n-1)
             }
         }
 
