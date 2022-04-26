@@ -108,7 +108,7 @@ impl PolyominoGridEdge {
                     n_walls.push(".".to_owned());
                 }
 
-                let cant_merge = pges.adjacent.iter().any(|x| x[0] == w.1.unwrap() && x[1] == s.1) || (s_size + w_size > MAX_PIECE);
+                let cant_merge = pges.adjacent.contains(&[w.1.unwrap(), s.1]) || (s_size + w_size > MAX_PIECE);
                 for w_wall in w_walls.iter() {
                     for n_wall in n_walls.iter() {
                         let wall = format!["{}{}", w_wall, n_wall];
@@ -126,7 +126,30 @@ impl PolyominoGridEdge {
         }
     }
 
-    fn from_stamp(stamp: i32) -> Self {
+    fn from_stamp(b: i32, p: i32, mut stamp: i32) -> Self {
+        let bm = (1 << b) - 1;
+        let pm = (1 << p) - 1;
+        
+        let col = stamp & bm;
+        stamp >>= b;
+
+        // decode regions
+        let mut regions = [0, 0, 0, 0, 0];
+        for ix in 1..NUM_COLS {
+            let num = stamp & bm;
+            stamp >>= b;
+            regions[ix] = num;
+        }
+
+        // decode sizes
+        let mut rgns = Vec::new();
+        for rgn in regions.iter() {
+            if rgns.contains(rgn) == false {
+                rgns.push(*rgn);
+            }
+        }
+        rgns.sort();
+
         todo!()
     }
 
@@ -201,11 +224,15 @@ fn main() {
         None
     );
 
-    #[derive(Default)]
-    struct PolyominoStateToExpansion {}
-
-    let mut state_to_expansion: [PolyominoStateToExpansion; NUM_COLS];
-    
+    let mut state_to_expansion: [std::collections::HashMap::<i32, _>; NUM_COLS] = 
+        [
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ];
+   
     let mut num_cached_states = 0;
     let mut expansion_cnt = 0;
     let mut expansion_len = 0;
@@ -287,14 +314,14 @@ fn main() {
 
     for row in 0..NUM_ROWS {
         for col in 0..NUM_COLS {
-            let new_wave = std::collections::HashMap::new();
-            let mut expansions = todo!();
+            let mut new_wave = std::collections::HashMap::new();
+            let mut expansions: [Option<()>; NUM_COLS] = [None; NUM_COLS];
 
             for state in wave.values() {
-                if todo!() {
-                    expansions = todo!();
+                if state_to_expansion[col].contains_key(state) {
+                    expansions = state_to_expansion[col][state];
                 } else {
-                    let edge = PolyominoGridEdge::from_stamp(*state);
+                    let edge = PolyominoGridEdge::from_stamp(pge.stamp_bits, pge.piece_bits, *state);
                     if COLUMN_STEP == 1 {
                         expansions = edge.expand(/* asStamps=True, withWalls=backtrack */);
                     } else {
