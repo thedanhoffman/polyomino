@@ -76,67 +76,56 @@ impl GridSliceState {
             .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
         {
             dbgwrap!("failed every non-zero length id has a position test");
-            return Err(());
-        }
-
-        // the total volume of all placed pieces must be divisible by the piece size
-        if cur_id_to_len_byte
+            Err(())
+        } else if cur_id_to_len_byte
             .iter()
             .map(|x| *x as GridVol)
             .sum::<GridVol>()
             % (len as GridVol)
             != 0
         {
+            // the total volume of all placed pieces must be divisible by the piece size
             dbgwrap!("failed divisibility test");
-            return Err(());
-        }
-
-        // verify that squares are symmetric
-        if cur_pos_to_id_byte
+            Err(())
+        } else if cur_pos_to_id_byte
             .iter()
-            .all(|x| cur_id_to_len_byte[*x as usize] == len) && *cur_pos_to_id_byte != vec![2; len as usize]
+            .all(|x| cur_id_to_len_byte[*x as usize] == len)
+            && *cur_pos_to_id_byte != vec![2; len as usize]
         {
+            // verify that squares are symmetric
             // vec![0; len] exists so we can choose one arbitrarily
             dbgwrap!("failed square symmetry test");
-            return Err(());
-        }
-
-        // the id must have fewer (or equal) positions than length
-        if !cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
+            Err(())
+        } else if !cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
                     .iter()
                     .filter(|x| **x == id as u8)
                     .count()
         }) {
+            // the id must have fewer (or equal) positions than length
             dbgwrap!("failed more or equal positions than length");
-            return Err(());
-        }
-       
-        // verify that the pos is always increasing
-        if !cur_pos_to_id_byte.iter().is_sorted() {
+            Err(())
+        } else if !cur_pos_to_id_byte.iter().is_sorted() {
+            // verify that the pos is always increasing
             dbgwrap!("failed increasing pos test");
-            return Err(());
-        }
-
-        if !cur_id_to_len_byte.iter().is_sorted() {
+            Err(())
+        } else if !cur_id_to_len_byte.iter().is_sorted() {
             dbgwrap!("failed increasing len test");
-            return Err(());
-        }
-
-        // every position must have a positive lenght piece
-        if !cur_pos_to_id_byte
+            Err(())
+        } else if !cur_pos_to_id_byte
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
         {
+            // every position must have a positive lenght piece
             dbgwrap!("failed every postion must have a positive length piece test");
-            return Err(());
+            Err(())
+        } else {
+            Ok(GridSliceState {
+                id_to_len: cur_id_to_len_byte.clone(),
+                pos_to_id: cur_pos_to_id_byte.clone(),
+            })
         }
-
-        Ok(GridSliceState {
-            id_to_len: cur_id_to_len_byte.clone(),
-            pos_to_id: cur_pos_to_id_byte.clone(),
-        })
     }
 
     fn get_len_by_id(&self, id: GridSliceStatePieceID) -> GridLen {
@@ -192,7 +181,9 @@ impl Grid {
             while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
                 dbgwrap!(
                     "{} {:?} {:?}",
-                    len, &cur_id_to_len_byte, &cur_pos_to_id_byte
+                    len,
+                    &cur_id_to_len_byte,
+                    &cur_pos_to_id_byte
                 );
                 if let Ok(t) = GridSliceState::new(len, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
                     ret.push(t)
@@ -309,29 +300,22 @@ mod tests {
 
         #[test]
         fn test_general_trominoes_slice_state() {
-            // NOTE: the paper doesn't distinguish between the three different tilings of a
-            // square with lines, but we have the flexibility to do that here. I'll match the
-            // paper as closely as possible for verification (i.e. assume all squares are
-            // identical)
             let answer = vec![
                 GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
                 GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
                 GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
-                GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(),
+                GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
                 GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
             ];
             let grid = Grid::new(3);
-            
+
             answer.iter().for_each(|x| {
                 if !answer.iter().any(|y| x == y) {
                     println!("cannot find\n{}\nin results", x);
                 }
             });
-    
-            assert_eq![
-                grid.slice_state.len(),
-                answer.len()
-            ];
+
+            assert_eq![grid.slice_state.len(), answer.len()];
         }
     }
 }
