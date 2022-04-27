@@ -193,13 +193,13 @@ impl GridSliceState {
 }
 
 #[derive(Debug)]
-struct GridSliceStateRelation {
+struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
     pub _coef: u64,
     pub _base: (u64, u64),
 }
 
-impl GridSliceStateRelation {
+impl GridSliceRelation {
     fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
         if {
             // we can just map the current x_piece_id to y_piece_id and verify that the sum of
@@ -234,7 +234,7 @@ impl GridSliceStateRelation {
                     discont || (strict_inc && accounting)
                 })
         } {
-            Ok(GridSliceStateRelation {
+            Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 // note: i think we only need to consider one symmetry, because any action on the
                 // other simultaneously will double-count the horizontal symmetry
@@ -251,7 +251,7 @@ impl GridSliceStateRelation {
 struct Grid {
     pub _len: GridLen,
     pub slice_state: Vec<GridSliceState>,
-    pub slice_state_relation: Vec<GridSliceStateRelation>,
+    pub slice_relation: Vec<GridSliceRelation>,
 }
 
 impl Grid {
@@ -297,16 +297,16 @@ impl Grid {
         ret
     }
 
-    fn new_slice_state_relation(
+    fn new_slice_relation(
         len: GridLen,
         slice_state: &Vec<GridSliceState>,
-    ) -> Vec<GridSliceStateRelation> {
+    ) -> Vec<GridSliceRelation> {
         slice_state
             .iter()
             .flat_map(move |x| {
                 slice_state
                     .iter()
-                    .flat_map(move |y| GridSliceStateRelation::new(len, x, y))
+                    .flat_map(move |y| GridSliceRelation::new(len, x, y))
             })
             .collect::<Vec<_>>()
     }
@@ -314,11 +314,11 @@ impl Grid {
     fn new(len: GridLen) -> Self {
         // note: size is the length/height of the square and the size of each partitioned area
         let slice_state = Self::new_slice_state(len);
-        let slice_state_relation = Self::new_slice_state_relation(len, &slice_state);
+        let slice_relation = Self::new_slice_relation(len, &slice_state);
         Self {
             _len: len,
             slice_state,
-            slice_state_relation,
+            slice_relation,
         }
     }
 }
@@ -327,139 +327,144 @@ fn main() {
     let grid = Grid::new(3);
 
     println!("slice_state: {:#?}", &grid.slice_state);
-    println!("slice_state_relation: {:#?}", &grid.slice_state_relation);
+    println!("slice_relation: {:#?}", &grid.slice_relation);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    mod explicit {
-        fn a(n: u64) -> u64 {
-            if n == 0 {
-                1
-            } else {
-                a(n - 1) + c(n - 1) + d(n - 1) + e(n - 1) + g(n - 1)
-            }
-        }
-
-        fn b(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                c(n - 1)
-            }
-        }
-
-        fn c(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                d(n - 1) + g(n - 1)
-            }
-        }
-
-        fn d(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                b(n - 1) + g(n - 1)
-            }
-        }
-
-        fn e(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                f(n - 1)
-            }
-        }
-
-        fn f(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                a(n - 1)
-            }
-        }
-
-        fn g(n: u64) -> u64 {
-            if n == 0 {
-                0
-            } else {
-                2 * a(n - 1)
-            }
-        }
-
-        #[test]
-        fn test_explicit_trominoes() {
-            assert_eq![a(1), 1];
-            assert_eq![a(2), 3];
-            assert_eq![a(3), 10];
-            assert_eq![a(4), 23];
-            assert_eq![a(5), 62];
-            assert_eq![a(6), 170];
-            assert_eq![a(7), 441];
-            assert_eq![a(8), 1173];
-            assert_eq![a(9), 3127];
-            assert_eq![a(10), 8266];
-        }
-    }
-
-    mod general {
+    mod trominoes {
         use super::*;
 
-        #[test]
-        fn test_general_trominoes_slice_state_funky() {
-            let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
-            let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
-
-            dbg![(a, b)];
-
-            assert![(a ^ b) && (a || b)];
-        }
-
-        #[test]
-        fn test_general_trominoes_slice_state() {
-            let answer = vec![
-                GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
-                GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
-                GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
-                GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
-                GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
-                GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
-                GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
-            ];
-            let grid = Grid::new(3);
-
-            answer.iter().for_each(|x| {
-                if !answer.iter().any(|y| x == y) {
-                    println!("cannot find\n{}\nin results", x);
+        mod explicit {
+            fn a(n: u64) -> u64 {
+                if n == 0 {
+                    1
+                } else {
+                    a(n - 1) + c(n - 1) + d(n - 1) + e(n - 1) + g(n - 1)
                 }
-            });
+            }
 
-            grid.slice_state.iter().for_each(|x| println!("{:?}", x));
+            fn b(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    c(n - 1)
+                }
+            }
 
-            assert_eq![grid.slice_state.len(), answer.len()];
+            fn c(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    d(n - 1) + g(n - 1)
+                }
+            }
 
-            grid.slice_state.iter().for_each(|x| println!("{}", x));
+            fn d(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    b(n - 1) + g(n - 1)
+                }
+            }
+
+            fn e(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    f(n - 1)
+                }
+            }
+
+            fn f(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    a(n - 1)
+                }
+            }
+
+            fn g(n: u64) -> u64 {
+                if n == 0 {
+                    0
+                } else {
+                    2 * a(n - 1)
+                }
+            }
+
+            #[test]
+            fn test_trominoes_explicit() {
+                assert_eq![a(1), 1];
+                assert_eq![a(2), 3];
+                assert_eq![a(3), 10];
+                assert_eq![a(4), 23];
+                assert_eq![a(5), 62];
+                assert_eq![a(6), 170];
+                assert_eq![a(7), 441];
+                assert_eq![a(8), 1173];
+                assert_eq![a(9), 3127];
+                assert_eq![a(10), 8266];
+            }
         }
 
-        #[test]
-        fn test_general_trominoes_slice_state_relation() {
-            let grid = Grid::new(3);
+        mod general {
+            use super::*;
 
-            grid.slice_state_relation
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| {
+            mod slice_state {}
+
+            mod slice_relation {}
+
+            #[test]
+            fn test_trominoes_general_slice_state_funky() {
+                let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
+                let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
+
+                dbg![(a, b)];
+
+                assert![(a ^ b) && (a || b)];
+            }
+
+            #[test]
+            fn test_trominoes_general_slice_state() {
+                let answer = vec![
+                    GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
+                    GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
+                    GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
+                    GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
+                    GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
+                    GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
+                    GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
+                ];
+                let grid = Grid::new(3);
+
+                answer.iter().for_each(|x| {
+                    if !answer.iter().any(|y| x == y) {
+                        println!("cannot find\n{}\nin results", x);
+                    }
+                });
+
+                grid.slice_state.iter().for_each(|x| println!("{:?}", x));
+
+                assert_eq![grid.slice_state.len(), answer.len()];
+
+                grid.slice_state.iter().for_each(|x| println!("{}", x));
+            }
+
+            #[test]
+            fn test_trominoes_general_slice_relation() {
+                let grid = Grid::new(3);
+
+                grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                     println!(
                         "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
                         i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
                     );
                 });
 
-            // assert![false];
+                // assert![false];
+            }
         }
     }
 }
