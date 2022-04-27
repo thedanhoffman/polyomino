@@ -424,11 +424,6 @@ mod tests {
 
                     assert![(a ^ b) && (a || b)];
                 }
-            }
-
-            mod slice_relation {
-                use super::*;
-
                 #[test]
                 fn test_trominoes_general_slice_state() {
                     let answer = vec![
@@ -456,44 +451,20 @@ mod tests {
                 }
             }
 
-            #[test]
-            fn test_trominoes_general_slice_state() {
-                let answer = vec![
-                    GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
-                    GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
-                    GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
-                    GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
-                    GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
-                    GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
-                    GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
-                ];
-                let grid = Grid::new(3);
+            mod slice_relation {
+                #[test]
+                fn test_trominoes_general_slice_relation() {
+                    let grid = Grid::new(3);
 
-                answer.iter().for_each(|x| {
-                    if !answer.iter().any(|y| x == y) {
-                        println!("cannot find\n{}\nin results", x);
-                    }
-                });
+                    grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
+                        println!(
+                            "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
+                            i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
+                        );
+                    });
 
-                grid.slice_state.iter().for_each(|x| println!("{:?}", x));
-
-                assert_eq![grid.slice_state.len(), answer.len()];
-
-                grid.slice_state.iter().for_each(|x| println!("{}", x));
-            }
-
-            #[test]
-            fn test_trominoes_general_slice_relation() {
-                let grid = Grid::new(3);
-
-                grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
-                    println!(
-                        "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
-                        i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
-                    );
-                });
-
-                // assert![false];
+                    // assert![false];
+                }
             }
         }
     }
