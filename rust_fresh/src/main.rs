@@ -18,23 +18,31 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> Result<Self, ()> {
-        // the total volume must be divisible by the piece size
+        // verify that every non-zero length id has a position
+        if !cur_id_to_len_byte
+            .iter()
+            .enumerate()
+            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
+        {
+            println!("failed every non-zero length id has a position test");
+            return Err(());
+        }
+
+        // the total volume of all placed pieces must be divisible by the piece size
         if cur_id_to_len_byte
             .iter()
-            .map(|x| *x as u16)
+            .map(|x| *x as GridVol)
             .sum::<GridVol>()
-            % (len as u16)
+            % (len as GridVol)
             != 0
         {
             println!("failed divisibility test");
             return Err(());
         }
 
-        // all squares of len by len are identical
-        if cur_id_to_len_byte.iter().all(|x| *x == len) {
-            // todo!();
-            // note i need to actually add one
-            println!("failed square symmetry test");
+        if cur_pos_to_id_byte.iter().all(|x| cur_id_to_len_byte[*x as usize] == len) {
+            // todo: actually add one
+            println!("failed squarey symmetry test");
             return Err(());
         }
 
@@ -47,16 +55,6 @@ impl GridSliceState {
                     .count()
         }) {
             println!("failed more or equal positions than length");
-            return Err(());
-        }
-
-        // all ids that have a length must have a position
-        if cur_id_to_len_byte
-            .iter()
-            .enumerate()
-            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
-        {
-            println!("failed all lengths must have a position test");
             return Err(());
         }
 
@@ -114,12 +112,12 @@ impl Grid {
 
         let mut add_with_carry = |val: &mut Vec<GridLen>, min: u8, max: u8| {
             let mut pos = 0;
-            while pos < val.len() && val[pos] == max - 1 {
+            while pos < val.len() && val[pos] == max {
                 val[pos] = min;
                 pos += 1;
             }
 
-            if pos < max as usize {
+            if pos < val.len() as usize {
                 val[pos] += 1;
                 true
             } else {
@@ -131,8 +129,11 @@ impl Grid {
         let mut cur_pos_to_id_byte = vec![0; len as usize];
 
         while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
-            while add_with_carry(&mut cur_pos_to_id_byte, 0, len) {
-                println!("{:?} {:?}", &cur_id_to_len_byte, &cur_pos_to_id_byte);
+            while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
+                println!(
+                    "{} {:?} {:?}",
+                    len, &cur_id_to_len_byte, &cur_pos_to_id_byte
+                );
                 if let Ok(t) = GridSliceState::new(len, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
                     ret.push(t)
                 }
@@ -249,7 +250,6 @@ mod tests {
         #[test]
         fn test_general_trominoes_slice_state() {
             let grid = Grid::new(3);
-            let answer = vec![];
             println!("grid.slice_state: {:#?}", grid.slice_state);
             panic!("grid.slice_state.len: {}", grid.slice_state.len());
         }
