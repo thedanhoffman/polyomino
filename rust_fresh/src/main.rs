@@ -4,15 +4,14 @@ type GridLen = u8;
 type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
-type GridSliceStateBound = u8;
 
 //macro_rules! dbgwrap {
 //    ($($args:expr),*) => { println!($($args),*) }
 //}
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => {};
-//}
+macro_rules! dbgwrap {
+    ($($args:expr),*) => {};
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -34,9 +33,9 @@ impl std::fmt::Display for GridSliceState {
                 } else {
                     "     "
                 }
-            );
+            ).unwrap();
         }
-        write!(f, "\n");
+        write!(f, "\n").unwrap();
         for i in 0..self.pos_to_id.len() {
             write!(
                 f,
@@ -56,9 +55,9 @@ impl std::fmt::Display for GridSliceState {
                         " ".to_owned()
                     }
                 }
-            );
+            ).unwrap();
         }
-        write!(f, "\n");
+        write!(f, "\n").unwrap();
         Ok(())
     }
 }
@@ -149,8 +148,8 @@ impl GridSliceState {
                             Some(new_id.1)
                         } else {
                             state.push((
-                                    cur_pos_to_id_byte[curr_idx],
-                                    state.iter().max().unwrap().1 + 1
+                                cur_pos_to_id_byte[curr_idx],
+                                state.iter().max().unwrap().1 + 1,
                             ));
                             Some(state.iter().max().unwrap().1 + 1)
                         }
@@ -178,14 +177,6 @@ impl GridSliceState {
         }
     }
 
-    fn get_len_by_id(&self, id: GridSliceStatePieceID) -> GridLen {
-        self.id_to_len[id as usize]
-    }
-
-    fn get_id_by_pos(&self, pos: GridLen) -> GridSliceStatePieceID {
-        self.pos_to_id[pos as usize]
-    }
-
     fn has_unique_flip(&self) -> bool {
         !self
             .pos_to_id
@@ -201,21 +192,20 @@ impl GridSliceState {
 
 #[derive(Debug)]
 struct GridSliceStateRelation {
-    pub func: (GridSliceState, GridSliceState),
-    pub coef: u64,
-    pub base: (u64, u64),
+    pub _func: (GridSliceState, GridSliceState),
+    pub _coef: u64,
+    pub _base: (u64, u64),
 }
 
 impl GridSliceStateRelation {
-    fn new(len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
+    fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
         if {
             // we can just map the current x_piece_id to y_piece_id and verify that the sum of
             // positions made by the piece is equal to the length at the second stage
             x.pos_to_id
                 .iter()
                 .zip(y.pos_to_id.iter())
-                .enumerate()
-                .all(|(pos, (x_id, y_id))| {
+                .all(|(x_id, y_id)| {
                     let discont =
                         x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
                     let strict_inc = x.id_to_len[*x_id as usize] < y.id_to_len[*y_id as usize];
@@ -243,11 +233,11 @@ impl GridSliceStateRelation {
                 })
         } {
             Ok(GridSliceStateRelation {
-                func: (x.clone(), y.clone()),
+                _func: (x.clone(), y.clone()),
                 // note: i think we only need to consider one symmetry, because any action on the
                 // other simultaneously will double-count the horizontal symmetry
-                coef: if x.has_unique_flip() { 2 } else { 1 },
-                base: (0, 0),
+                _coef: if x.has_unique_flip() { 2 } else { 1 },
+                _base: (0, 0),
             })
         } else {
             Err(())
@@ -257,7 +247,7 @@ impl GridSliceStateRelation {
 
 #[derive(Debug)]
 struct Grid {
-    pub len: GridLen,
+    pub _len: GridLen,
     pub slice_state: Vec<GridSliceState>,
     pub slice_state_relation: Vec<GridSliceStateRelation>,
 }
@@ -270,7 +260,7 @@ impl Grid {
 
         let mut ret = Vec::new();
 
-        let mut add_with_carry = |val: &mut Vec<GridLen>, min: u8, max: u8| {
+        let add_with_carry = |val: &mut Vec<GridLen>, min: u8, max: u8| {
             let mut pos = 0;
             while pos < val.len() && val[pos] == max {
                 val[pos] = min;
@@ -324,7 +314,7 @@ impl Grid {
         let slice_state = Self::new_slice_state(len);
         let slice_state_relation = Self::new_slice_state_relation(len, &slice_state);
         Self {
-            len,
+            _len: len,
             slice_state,
             slice_state_relation,
         }
@@ -332,7 +322,10 @@ impl Grid {
 }
 
 fn main() {
-    println!("Hello, world!");
+    let grid = Grid::new(3);
+
+    println!("slice_state: {:#?}", &grid.slice_state);
+    println!("slice_state_relation: {:#?}", &grid.slice_state_relation);
 }
 
 #[cfg(test)]
@@ -416,15 +409,16 @@ mod tests {
 
         #[test]
         fn test_general_trominoes_slice_state_funky() {
-            dbg![GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2])];
-            dbg![GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2])];
-            
+            let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
+            let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
+
+            dbg![(a, b)];
+
             assert![
-                GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok()
-                    ^ GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok()
+                (a ^ b) && (a || b)
             ];
         }
-        
+
         #[test]
         fn test_general_trominoes_slice_state() {
             let answer = vec![
@@ -447,11 +441,12 @@ mod tests {
             grid.slice_state.iter().for_each(|x| println!("{:?}", x));
 
             assert_eq![grid.slice_state.len(), answer.len()];
+
+            grid.slice_state.iter().for_each(|x| println!("{}", x));
         }
 
         #[test]
-        fn test_general_trominoes_slice_state_relation() {
-            let grid = Grid::new(3);
+        fn test_general_trominoes_slice_state_relation() {            let grid = Grid::new(3);
 
             grid.slice_state_relation
                 .iter()
@@ -459,7 +454,7 @@ mod tests {
                 .for_each(|(i, x)| {
                     println!(
                         "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
-                        i, x.func.1, x.func.0, x.coef, x.base.0, x.base.1
+                        i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
                     );
                 });
 
