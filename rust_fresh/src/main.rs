@@ -412,18 +412,48 @@ mod tests {
         mod general {
             use super::*;
 
-            mod slice_state {}
+            mod slice_state {
+                use super::*;
 
-            mod slice_relation {}
+                #[test]
+                fn test_trominoes_general_slice_state_funky() {
+                    let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
+                    let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
 
-            #[test]
-            fn test_trominoes_general_slice_state_funky() {
-                let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
-                let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
+                    dbg![(a, b)];
 
-                dbg![(a, b)];
+                    assert![(a ^ b) && (a || b)];
+                }
+            }
 
-                assert![(a ^ b) && (a || b)];
+            mod slice_relation {
+                use super::*;
+
+                #[test]
+                fn test_trominoes_general_slice_state() {
+                    let answer = vec![
+                        GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
+                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
+                        GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
+                        GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
+                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
+                        GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
+                    ];
+                    let grid = Grid::new(3);
+
+                    answer.iter().for_each(|x| {
+                        if !answer.iter().any(|y| x == y) {
+                            println!("cannot find\n{}\nin results", x);
+                        }
+                    });
+
+                    grid.slice_state.iter().for_each(|x| println!("{:?}", x));
+
+                    assert_eq![grid.slice_state.len(), answer.len()];
+
+                    grid.slice_state.iter().for_each(|x| println!("{}", x));
+                }
             }
 
             #[test]
