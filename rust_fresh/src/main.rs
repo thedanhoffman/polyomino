@@ -33,7 +33,8 @@ impl std::fmt::Display for GridSliceState {
                 } else {
                     "     "
                 }
-            ).unwrap();
+            )
+            .unwrap();
         }
         write!(f, "\n").unwrap();
         for i in 0..self.pos_to_id.len() {
@@ -55,7 +56,8 @@ impl std::fmt::Display for GridSliceState {
                         " ".to_owned()
                     }
                 }
-            ).unwrap();
+            )
+            .unwrap();
         }
         write!(f, "\n").unwrap();
         Ok(())
@@ -414,9 +416,7 @@ mod tests {
 
             dbg![(a, b)];
 
-            assert![
-                (a ^ b) && (a || b)
-            ];
+            assert![(a ^ b) && (a || b)];
         }
 
         #[test]
@@ -446,7 +446,8 @@ mod tests {
         }
 
         #[test]
-        fn test_general_trominoes_slice_state_relation() {            let grid = Grid::new(3);
+        fn test_general_trominoes_slice_state_relation() {
+            let grid = Grid::new(3);
 
             grid.slice_state_relation
                 .iter()
