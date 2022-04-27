@@ -102,6 +102,7 @@ impl GridSliceState {
             dbgwrap!("failed increasing pos test");
             Err(())
         } else if !cur_id_to_len_byte.iter().is_sorted() {
+            // verify that the len is always increasing
             dbgwrap!("failed increasing len test");
             Err(())
         } else if !cur_pos_to_id_byte
