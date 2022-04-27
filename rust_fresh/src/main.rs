@@ -12,27 +12,54 @@ struct GridSliceState {
     // multiple copies must be explicitly stored as-needed
     pub id_to_len: Vec<GridLen>,
     pub pos_to_id: Vec<GridSliceStatePieceID>,
-    pub pos_bound: Vec<GridSliceStateBound>,
+}
+
+impl std::fmt::Display for GridSliceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for i in 0..self.pos_to_id.len() {
+            write!(
+                f,
+                "{}",
+                if self.id_to_len[self.pos_to_id[i] as usize] == self.pos_to_id.len() as u8 { // NOTE: i'm really leaning on everything being a square
+                    "_____"
+                } else {
+                    "     "
+                }
+            );
+        }
+        write!(f, "\n");
+        for i in 0..self.pos_to_id.len() {
+            write!(
+                f, 
+                "{} {} {}",
+                {
+                    if i == 0 || self.pos_to_id[i - 1] != self.pos_to_id[i] {
+                        "|".to_owned()
+                    } else {
+                        " ".to_owned()
+                    }
+                },
+                self.id_to_len[self.pos_to_id[i] as usize].to_string(),
+                {
+                    if i == self.pos_to_id.len() - 1 || self.pos_to_id[i + 1] != self.pos_to_id[i]
+                    {
+                        "|".to_owned()
+                    } else {
+                        " ".to_owned()
+                    }
+                }
+            );
+        }
+        write!(f, "\n");
+        Ok(())
+    }
 }
 
 impl GridSliceState {
-    fn get_pos_bound_left(a: GridSliceStateBound) -> bool {
-        (a & 0b1) != 0
-    }
-
-    fn get_pos_bound_top(a: GridSliceStateBound) -> bool {
-        (a & 0b01) != 0
-    }
-
-    fn get_pos_bound_right(a: GridSliceStateBound) -> bool {
-        (a & 0b001) != 0
-    }
-
     fn new(
         len: GridLen,
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-        cur_pos_bound_byte: &Vec<GridSliceStateBound>,
     ) -> Result<Self, ()> {
         // verify that every non-zero length id has a position
         if !cur_id_to_len_byte
@@ -93,34 +120,9 @@ impl GridSliceState {
             return Err(());
         }
 
-        // boundary tests
-        // verify that left and right bounds are consistent with each other
-        if !cur_pos_bound_byte.iter().enumerate().all(|(pos, bound)| {
-            pos == 0
-                || pos == cur_pos_bound_byte.len() - 1
-                || (Self::get_pos_bound_right(cur_pos_bound_byte[pos - 1])
-                    == Self::get_pos_bound_left(*bound)
-                    && Self::get_pos_bound_left(cur_pos_bound_byte[pos + 1])
-                        == Self::get_pos_bound_right(*bound))
-        }) {
-            println!("failed the consistent pos bound test");
-            return Err(());
-        }
-
-        // verify that the left boundary and right boundary are set
-        if Self::get_pos_bound_left(cur_pos_bound_byte[0])
-            || Self::get_pos_bound_right(cur_pos_bound_byte[cur_pos_bound_byte.len() - 1])
-        {
-            println!("failed the edge pos bound test");
-            return Err(());
-        }
-
-        // verify that 
-
         Ok(GridSliceState {
             id_to_len: cur_id_to_len_byte.clone(),
             pos_to_id: cur_pos_to_id_byte.clone(),
-            pos_bound: cur_pos_bound_byte.clone(),
         })
     }
 
@@ -172,23 +174,15 @@ impl Grid {
 
         let mut cur_id_to_len_byte = vec![0; len as usize];
         let mut cur_pos_to_id_byte = vec![0; len as usize];
-        let mut cur_pos_bound_byte = vec![0; len as usize];
 
         while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
             while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
-                while add_with_carry(&mut cur_pos_bound_byte, 0, len) {
-                    println!(
-                        "{} {:?} {:?}",
-                        len, &cur_id_to_len_byte, &cur_pos_to_id_byte
-                    );
-                    if let Ok(t) = GridSliceState::new(
-                        len,
-                        &cur_id_to_len_byte,
-                        &cur_pos_to_id_byte,
-                        &cur_pos_bound_byte,
-                    ) {
-                        ret.push(t)
-                    }
+                println!(
+                    "{} {:?} {:?}",
+                    len, &cur_id_to_len_byte, &cur_pos_to_id_byte
+                );
+                if let Ok(t) = GridSliceState::new(len, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
+                    ret.push(t)
                 }
             }
         }
@@ -303,7 +297,9 @@ mod tests {
         #[test]
         fn test_general_trominoes_slice_state() {
             let grid = Grid::new(3);
-            println!("grid.slice_state: {:#?}", grid.slice_state);
+            for i in 0..grid.slice_state.len() {
+                println!("{}:\n{}", i, grid.slice_state[i]);
+            }
             panic!("grid.slice_state.len: {}", grid.slice_state.len());
         }
     }
