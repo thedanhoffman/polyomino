@@ -6,13 +6,13 @@ type GridVol = u16;
 type GridSliceStatePieceID = u8;
 type GridSliceStateBound = u8;
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
 macro_rules! dbgwrap {
-    ($($args:expr),*) => {}
+    ($($args:expr),*) => { println!($($args),*) }
 }
+
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => {};
+//}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -69,6 +69,8 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> Result<Self, ()> {
+        println!("cur_pos_to_id_byte: {:?}", &cur_pos_to_id_byte);
+        println!("cur_id_to_len_byte: {:?}", &cur_id_to_len_byte);
         // verify that every non-zero length id has a position
         if !cur_id_to_len_byte
             .iter()
@@ -109,8 +111,63 @@ impl GridSliceState {
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
         {
-            // every position must have a positive lenght piece
             dbgwrap!("failed every postion must have a positive length piece test");
+            Err(())
+        } else if cur_pos_to_id_byte // palindromic in piece length
+            .iter()
+            .map(|x| cur_id_to_len_byte[*x as usize])
+            .eq(cur_pos_to_id_byte
+                .iter()
+                .rev()
+                .map(|x| cur_id_to_len_byte[*x as usize]))
+            && cur_pos_to_id_byte
+                .iter()
+                .rev()
+                .enumerate()
+                .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
+                    // we use scan re-map it, effectively. note that enumerate comes
+                    // after rev, so it indexes the reverse
+
+                    dbg![x];
+                    dbg![&state];
+
+                    let ret = if x.0 > 0 {
+                        // if the underlying has decreased by one, increase ours by one
+                        let last_idx = x.0 - 1;
+                        let curr_idx = x.0;
+
+                        // dbg![last_idx;
+                        // dbg![curr_idx];
+
+                        assert![cur_pos_to_id_byte[curr_idx] >= cur_pos_to_id_byte[last_idx]];
+
+                        // if we have already mapped this value, repeat it
+                        // otherwise, if it has increased, add it to the map
+
+                        if let Some(new_id) = state.iter().find(|x_| x_.0 == *x.1) {
+                            Some(new_id.1)
+                        } else {
+                            state.push((
+                                    cur_pos_to_id_byte[curr_idx],
+                                    state.iter().max().unwrap().1 + 1
+                            ));
+                            Some(state.iter().max().unwrap().1 + 1)
+                        }
+                    } else {
+                        state.push((cur_pos_to_id_byte[x.0], cur_pos_to_id_byte[x.0]));
+                        Some(cur_pos_to_id_byte[x.0])
+                    };
+                    dbg![ret];
+
+                    ret
+                })
+                .lt(cur_pos_to_id_byte.iter().map(|x| *x))
+        {
+            // this one is a bit funky, had to take about seven pages of notes
+            //
+            // we need to canonicalize the form somehow, and there are cases where
+            // we have identical output wtih different pos_to_id mappings
+            dbgwrap!("failed the funky test");
             Err(())
         } else {
             Ok(GridSliceState {
@@ -167,8 +224,19 @@ impl GridSliceStateRelation {
 
                     dbgwrap!("attempting to combine\n{}{}", y, x);
                     dbgwrap!("discont: {}", discont);
-                    dbgwrap!("strict_inc: {} ({} < {})", strict_inc, x.id_to_len[*x_id as usize], y.id_to_len[*y_id as usize]);
-                    dbgwrap!("accounting: {} ({} == {} - {})", accounting, y.id_to_len[*y_id as usize], x.id_to_len[*x_id as usize], y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as u8);
+                    dbgwrap!(
+                        "strict_inc: {} ({} < {})",
+                        strict_inc,
+                        x.id_to_len[*x_id as usize],
+                        y.id_to_len[*y_id as usize]
+                    );
+                    dbgwrap!(
+                        "accounting: {} ({} == {} - {})",
+                        accounting,
+                        y.id_to_len[*y_id as usize],
+                        x.id_to_len[*x_id as usize],
+                        y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as u8
+                    );
 
                     discont || (strict_inc && accounting)
                 })
@@ -346,6 +414,17 @@ mod tests {
         use super::*;
 
         #[test]
+        fn test_general_trominoes_slice_state_funky() {
+            dbg![GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2])];
+            dbg![GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2])];
+            
+            assert![
+                GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok()
+                    ^ GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok()
+            ];
+        }
+/*
+        #[test]
         fn test_general_trominoes_slice_state() {
             let answer = vec![
                 GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
@@ -385,5 +464,6 @@ mod tests {
 
             // assert![false];
         }
+*/
     }
 }
