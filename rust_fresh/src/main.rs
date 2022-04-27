@@ -6,6 +6,14 @@ type GridVol = u16;
 type GridSliceStatePieceID = u8;
 type GridSliceStateBound = u8;
 
+macro_rules! dbgwrap {
+    ($($args:expr),*) => { println!($($args),*) }
+}
+
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => {}
+//}
+
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct GridSliceState {
     // note: symmetries are not resolved in the type, so
@@ -67,7 +75,7 @@ impl GridSliceState {
             .enumerate()
             .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
         {
-            println!("failed every non-zero length id has a position test");
+            dbgwrap!("failed every non-zero length id has a position test");
             return Err(());
         }
 
@@ -79,17 +87,17 @@ impl GridSliceState {
             % (len as GridVol)
             != 0
         {
-            println!("failed divisibility test");
+            dbgwrap!("failed divisibility test");
             return Err(());
         }
 
         // verify that squares are symmetric
         if cur_pos_to_id_byte
             .iter()
-            .all(|x| cur_id_to_len_byte[*x as usize] == len)
+            .all(|x| cur_id_to_len_byte[*x as usize] == len) && *cur_pos_to_id_byte != vec![2; len as usize]
         {
-            // todo: actually add one
-            println!("failed squarey symmetry test");
+            // vec![0; len] exists so we can choose one arbitrarily
+            dbgwrap!("failed square symmetry test");
             return Err(());
         }
 
@@ -101,13 +109,18 @@ impl GridSliceState {
                     .filter(|x| **x == id as u8)
                     .count()
         }) {
-            println!("failed more or equal positions than length");
+            dbgwrap!("failed more or equal positions than length");
+            return Err(());
+        }
+       
+        // verify that the pos is always increasing
+        if !cur_pos_to_id_byte.iter().is_sorted() {
+            dbgwrap!("failed increasing pos test");
             return Err(());
         }
 
-        // ids must be increasing in number from left to right (reduce isomorphisms)
-        if !cur_pos_to_id_byte.iter().is_sorted() {
-            println!("failed increasing id test");
+        if !cur_id_to_len_byte.iter().is_sorted() {
+            dbgwrap!("failed increasing len test");
             return Err(());
         }
 
@@ -116,7 +129,7 @@ impl GridSliceState {
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
         {
-            println!("failed every postion must have a positive length piece test");
+            dbgwrap!("failed every postion must have a positive length piece test");
             return Err(());
         }
 
@@ -177,7 +190,7 @@ impl Grid {
 
         while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
             while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
-                println!(
+                dbgwrap!(
                     "{} {:?} {:?}",
                     len, &cur_id_to_len_byte, &cur_pos_to_id_byte
                 );
@@ -296,11 +309,29 @@ mod tests {
 
         #[test]
         fn test_general_trominoes_slice_state() {
+            // NOTE: the paper doesn't distinguish between the three different tilings of a
+            // square with lines, but we have the flexibility to do that here. I'll match the
+            // paper as closely as possible for verification (i.e. assume all squares are
+            // identical)
+            let answer = vec![
+                GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
+                GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
+                GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
+                GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(),
+                GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
+            ];
             let grid = Grid::new(3);
-            for i in 0..grid.slice_state.len() {
-                println!("{}:\n{}", i, grid.slice_state[i]);
-            }
-            panic!("grid.slice_state.len: {}", grid.slice_state.len());
+            
+            answer.iter().for_each(|x| {
+                if !answer.iter().any(|y| x == y) {
+                    println!("cannot find\n{}\nin results", x);
+                }
+            });
+    
+            assert_eq![
+                grid.slice_state.len(),
+                answer.len()
+            ];
         }
     }
 }
