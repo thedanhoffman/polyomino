@@ -20,7 +20,8 @@ impl std::fmt::Display for GridSliceState {
             write!(
                 f,
                 "{}",
-                if self.id_to_len[self.pos_to_id[i] as usize] == self.pos_to_id.len() as u8 { // NOTE: i'm really leaning on everything being a square
+                if self.id_to_len[self.pos_to_id[i] as usize] == self.pos_to_id.len() as u8 {
+                    // NOTE: i'm really leaning on everything being a square
                     "_____"
                 } else {
                     "     "
@@ -30,7 +31,7 @@ impl std::fmt::Display for GridSliceState {
         write!(f, "\n");
         for i in 0..self.pos_to_id.len() {
             write!(
-                f, 
+                f,
                 "{} {} {}",
                 {
                     if i == 0 || self.pos_to_id[i - 1] != self.pos_to_id[i] {
@@ -41,8 +42,7 @@ impl std::fmt::Display for GridSliceState {
                 },
                 self.id_to_len[self.pos_to_id[i] as usize].to_string(),
                 {
-                    if i == self.pos_to_id.len() - 1 || self.pos_to_id[i + 1] != self.pos_to_id[i]
-                    {
+                    if i == self.pos_to_id.len() - 1 || self.pos_to_id[i + 1] != self.pos_to_id[i] {
                         "|".to_owned()
                     } else {
                         " ".to_owned()
