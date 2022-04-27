@@ -14,7 +14,7 @@ macro_rules! dbgwrap {
 //    ($($args:expr),*) => {}
 //}
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
     // note: symmetries are not resolved in the type, so
     // multiple copies must be explicitly stored as-needed
@@ -138,17 +138,52 @@ impl GridSliceState {
 }
 
 #[derive(Debug)]
-struct GridSliceStateRecurrence {
+struct GridSliceStateRelation {
     pub func: (GridSliceState, GridSliceState),
     pub coef: u64,
     pub base: (u64, u64),
+}
+
+impl GridSliceStateRelation {
+    fn new(len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
+        if {
+            // we need an intermediate value, let's call it surplus, which is
+            // the difference between the length of the piece and the number of
+            // positions. we can generate a recurrence relation as follows
+            //   - the volume of pieces at our level is the same as the surplus
+            //     from above (i.e. the only increase in volume comes from the
+            //     transformation)
+            //   - another can be generated if there is symmetry
+            //
+            // some things to keep in mind
+            //   - every piece whose length is not the width of the board must
+            //     continue to grow
+            //   - we can assume (but need to use) a standardized representation
+            //     of a slice state
+
+            let id_to_surplus = x.id_to_len.iter().enumerate().map(|(x_id, x_len)| {
+                // note: need to make some comments on this thought process
+                len - x_len + x.pos_to_id.iter().filter(|x_id_| x_id as u8 == **x_id_).count() as u8 - 1
+            }).collect::<Vec<_>>();
+
+            panic!("x: {:#?}, {}, id_to_surplus: {:#?}", x, x, id_to_surplus)
+        } {
+            Ok(GridSliceStateRelation {
+                func: (x.clone(), y.clone()),
+                coef: todo!(), // the only way this can be >1 is by using symmetry
+                base: (todo!(), todo!()),
+            })
+        } else {
+            Err(())
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Grid {
     pub len: GridLen,
     pub slice_state: Vec<GridSliceState>,
-    pub slice_state_relation: Vec<GridSliceStateRecurrence>,
+    pub slice_state_relation: Vec<GridSliceStateRelation>,
 }
 
 impl Grid {
@@ -197,10 +232,15 @@ impl Grid {
     fn new_slice_state_relation(
         len: GridLen,
         slice_state: &Vec<GridSliceState>,
-    ) -> Vec<GridSliceStateRecurrence> {
-        // construct relations between slice states (i.e. build each equation in the recurrence
-        // relation)
-        Vec::new()
+    ) -> Vec<GridSliceStateRelation> {
+        slice_state
+            .iter()
+            .flat_map(move |x| {
+                slice_state
+                    .iter()
+                    .flat_map(move |y| GridSliceStateRelation::new(len, x, y))
+            })
+            .collect::<Vec<_>>()
     }
 
     fn new(len: GridLen) -> Self {
