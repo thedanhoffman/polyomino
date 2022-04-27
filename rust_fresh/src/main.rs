@@ -6,13 +6,13 @@ type GridVol = u16;
 type GridSliceStatePieceID = u8;
 type GridSliceStateBound = u8;
 
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
-
 //macro_rules! dbgwrap {
-//    ($($args:expr),*) => {}
+//    ($($args:expr),*) => { println!($($args),*) }
 //}
+
+macro_rules! dbgwrap {
+    ($($args:expr),*) => {}
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -87,15 +87,6 @@ impl GridSliceState {
             // the total volume of all placed pieces must be divisible by the piece size
             dbgwrap!("failed divisibility test");
             Err(())
-        } else if cur_pos_to_id_byte
-            .iter()
-            .all(|x| cur_id_to_len_byte[*x as usize] == len)
-            && *cur_pos_to_id_byte != vec![2; len as usize]
-        {
-            // verify that squares are symmetric
-            // vec![0; len] exists so we can choose one arbitrarily
-            dbgwrap!("failed square symmetry test");
-            Err(())
         } else if !cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
@@ -135,6 +126,18 @@ impl GridSliceState {
     fn get_id_by_pos(&self, pos: GridLen) -> GridSliceStatePieceID {
         self.pos_to_id[pos as usize]
     }
+
+    fn has_unique_flip(&self) -> bool {
+        !self
+            .pos_to_id
+            .iter()
+            .map(|x_id| self.id_to_len[*x_id as usize])
+            .eq(self
+                .pos_to_id
+                .iter()
+                .map(|x_id| self.id_to_len[*x_id as usize])
+                .rev())
+    }
 }
 
 #[derive(Debug)]
@@ -147,31 +150,34 @@ struct GridSliceStateRelation {
 impl GridSliceStateRelation {
     fn new(len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
         if {
-            // we need an intermediate value, let's call it surplus, which is
-            // the difference between the length of the piece and the number of
-            // positions. we can generate a recurrence relation as follows
-            //   - the volume of pieces at our level is the same as the surplus
-            //     from above (i.e. the only increase in volume comes from the
-            //     transformation)
-            //   - another can be generated if there is symmetry
-            //
-            // some things to keep in mind
-            //   - every piece whose length is not the width of the board must
-            //     continue to grow
-            //   - we can assume (but need to use) a standardized representation
-            //     of a slice state
+            // we can just map the current x_piece_id to y_piece_id and verify that the sum of
+            // positions made by the piece is equal to the length at the second stage
+            x.pos_to_id
+                .iter()
+                .zip(y.pos_to_id.iter())
+                .enumerate()
+                .all(|(pos, (x_id, y_id))| {
+                    let discont =
+                        x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
+                    let strict_inc = x.id_to_len[*x_id as usize] < y.id_to_len[*y_id as usize];
+                    let accounting = y.id_to_len[*y_id as usize] as i16
+                        == x.id_to_len[*x_id as usize] as i16
+                            + y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
 
-            let id_to_surplus = x.id_to_len.iter().enumerate().map(|(x_id, x_len)| {
-                // note: need to make some comments on this thought process
-                len - x_len + x.pos_to_id.iter().filter(|x_id_| x_id as u8 == **x_id_).count() as u8 - 1
-            }).collect::<Vec<_>>();
+                    dbgwrap!("attempting to combine\n{}{}", y, x);
+                    dbgwrap!("discont: {}", discont);
+                    dbgwrap!("strict_inc: {} ({} < {})", strict_inc, x.id_to_len[*x_id as usize], y.id_to_len[*y_id as usize]);
+                    dbgwrap!("accounting: {} ({} == {} - {})", accounting, y.id_to_len[*y_id as usize], x.id_to_len[*x_id as usize], y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as u8);
 
-            panic!("x: {:#?}, {}, id_to_surplus: {:#?}", x, x, id_to_surplus)
+                    discont || (strict_inc && accounting)
+                })
         } {
             Ok(GridSliceStateRelation {
                 func: (x.clone(), y.clone()),
-                coef: todo!(), // the only way this can be >1 is by using symmetry
-                base: (todo!(), todo!()),
+                // note: i think we only need to consider one symmetry, because any action on the
+                // other simultaneously will double-count the horizontal symmetry
+                coef: if x.has_unique_flip() { 2 } else { 1 },
+                base: (0, 0),
             })
         } else {
             Err(())
@@ -345,6 +351,8 @@ mod tests {
                 GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
                 GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
                 GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
+                GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
+                GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
                 GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
             ];
             let grid = Grid::new(3);
@@ -355,7 +363,26 @@ mod tests {
                 }
             });
 
+            grid.slice_state.iter().for_each(|x| println!("{:?}", x));
+
             assert_eq![grid.slice_state.len(), answer.len()];
+        }
+
+        #[test]
+        fn test_general_trominoes_slice_state_relation() {
+            let grid = Grid::new(3);
+
+            grid.slice_state_relation
+                .iter()
+                .enumerate()
+                .for_each(|(i, x)| {
+                    println!(
+                        "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
+                        i, x.func.1, x.func.0, x.coef, x.base.0, x.base.1
+                    );
+                });
+
+            // assert![false];
         }
     }
 }
