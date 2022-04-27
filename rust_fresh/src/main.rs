@@ -6,9 +6,9 @@ type GridVol = u16;
 type GridSliceStatePieceID = u8;
 type GridSliceStateBound = u8;
 
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => { println!($($args),*) }
+//}
 
 //macro_rules! dbgwrap {
 //    ($($args:expr),*) => {};
@@ -69,8 +69,9 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> Result<Self, ()> {
-        println!("cur_pos_to_id_byte: {:?}", &cur_pos_to_id_byte);
-        println!("cur_id_to_len_byte: {:?}", &cur_id_to_len_byte);
+        // the paper black-boxed how it generates the trominoes/nonominoes and the complexity here
+        // is enough for the 20 minutes, so I'll be going over the symmetries involved
+
         // verify that every non-zero length id has a position
         if !cur_id_to_len_byte
             .iter()
@@ -423,7 +424,7 @@ mod tests {
                     ^ GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok()
             ];
         }
-/*
+        
         #[test]
         fn test_general_trominoes_slice_state() {
             let answer = vec![
@@ -464,6 +465,5 @@ mod tests {
 
             // assert![false];
         }
-*/
     }
 }
