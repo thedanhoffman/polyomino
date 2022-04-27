@@ -1,9 +1,155 @@
+#![feature(is_sorted)]
+
+type GridLen = u8;
+type GridVol = u16;
+
+type GridSliceStatePieceID = u8;
+#[derive(Debug, Eq, PartialEq, Hash)]
+struct GridSliceState {
+    // note: symmetries are not resolved in the type, so
+    // multiple copies must be explicitly stored as-needed
+    pub id_to_len: Vec<GridLen>,
+    pub pos_to_id: Vec<GridSliceStatePieceID>
+}
+
+impl GridSliceState {
+    fn new(id_to_len: Vec<GridLen>, pos_to_id: Vec<GridSliceStatePieceID>) -> Result<Self, ()> {
+        todo!()
+    }
+
+    fn get_len_by_id(&self, id: GridSliceStatePieceID) -> GridLen {
+        self.id_to_len[id as usize]
+    }
+
+    fn get_id_by_pos(&self, pos: GridLen) -> GridSliceStatePieceID {
+        self.pos_to_id[pos as usize]
+    }
+}
+
+#[derive(Debug)]
+struct GridSliceStateRecurrence {
+    pub func: (GridSliceState, GridSliceState),
+    pub coef:  u64,
+    pub base: (u64, u64),
+}
+
+#[derive(Debug)]
+struct Grid {
+    pub len: GridLen,
+    pub slice_state: Vec<GridSliceState>,
+    pub slice_state_relation: Vec<GridSliceStateRecurrence>
+}
+
+impl Grid {
+    fn new_slice_state(len: GridLen) -> Vec<GridSliceState> {
+        // generate all slice states individually
+        // note: this is a very naive way of doing it, but should be updated by the time I need to
+        // present
+     
+        let mut ret = Vec::new();
+        
+        let mut add_with_carry = |val: &mut Vec<GridLen>, min: u8, max: u8| {
+            let mut pos = 0;
+            while pos < val.len() && val[pos] == max - 1 {
+                val[pos] = min;
+                pos += 1;
+            }
+
+            if pos < max as usize {
+                val[pos] += 1;
+                true
+            } else {
+                false
+            }
+        };
+
+        let mut cur_id_to_len_byte = vec![0; len as usize];
+        let mut cur_pos_to_id_byte = vec![0; len as usize];
+        
+        while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
+                // the total volume must be divisible by the piece size
+                if cur_id_to_len_byte.iter().map(|x| *x as u16).sum::<GridVol>() % (len as u16) != 0 {
+                    println!("failed divisibility test");
+                    continue;
+                }
+               
+                // all squares of len by len are identical
+                if cur_id_to_len_byte.iter().all(|x| *x == len) {
+                    // todo!();
+                    // note i need to actually add one
+                    println!("failed square symmetry test");
+                    continue;
+                }
+
+
+           while add_with_carry(&mut cur_pos_to_id_byte, 0, len) {
+               println!("{:?} {:?}", &cur_id_to_len_byte, &cur_pos_to_id_byte);
+
+                // the id must have fewer (or equal) positions than length 
+                if !cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
+                    (*len as usize) >= cur_pos_to_id_byte.iter().filter(|x| **x == id as u8).count()
+                }) {
+                    println!("failed more or equal positions than length");
+                    continue;
+                }
+
+                // all ids that have a length must have a position
+                if cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
+                    *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8)
+                }) {
+                    println!("failed all lengths must have a position test");
+                    continue;
+                }
+
+                // ids must be increasing in number from left to right (reduce isomorphisms)
+                if !cur_pos_to_id_byte.iter().is_sorted() {
+                    println!("failed increasing id test");
+                    continue;
+                }
+        
+                // every position must have a positive lenght piece
+                if !cur_pos_to_id_byte.iter().all(|x| cur_id_to_len_byte[*x as usize] > 0) {
+                    println!("failed every postion must have a positive length piece test");
+                    continue;
+                }
+
+                // valid
+                ret.push(GridSliceState{
+                    id_to_len: cur_id_to_len_byte.clone(),
+                    pos_to_id: cur_pos_to_id_byte.clone()
+                });
+            }
+        }
+        
+        ret
+    }
+
+    fn new_slice_state_relation(len: GridLen, slice_state: &Vec<GridSliceState>) -> Vec<GridSliceStateRecurrence> {
+        // construct relations between slice states (i.e. build each equation in the recurrence
+        // relation)
+        Vec::new()
+    }
+
+    fn new(len: GridLen) -> Self {
+        // note: size is the length/height of the square and the size of each partitioned area
+        let slice_state = Self::new_slice_state(len);
+        let slice_state_relation = Self::new_slice_state_relation(len, &slice_state);
+        Self {
+            len,
+            slice_state,
+            slice_state_relation
+        }
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     mod explicit {
         fn a(n: u64) -> u64 {
             if n == 0 {
@@ -75,4 +221,16 @@ mod tests {
             assert_eq![a(10), 8266];
         }
     }
+
+    mod general {
+        use super::*;
+
+        #[test]
+        fn test_general_trominoes_slice_state() {
+            let grid = Grid::new(3);
+
+            println!("grid.slice_state: {:#?}", grid.slice_state);
+            panic!("grid.slice_state.len: {}", grid.slice_state.len()); 
+        }
+   }
 }
