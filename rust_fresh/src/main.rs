@@ -5,13 +5,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
 macro_rules! dbgwrap {
-    ($($args:expr),*) => {};
+    ($($args:expr),*) => { println!($($args),*) }
 }
+
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => {};
+//}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -23,7 +23,7 @@ struct GridSliceState {
 
 impl std::fmt::Display for GridSliceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-       for i in 0..self.pos_to_id.len() {
+        for i in 0..self.pos_to_id.len() {
             write!(
                 f,
                 "{} {} {}",
@@ -50,57 +50,60 @@ impl std::fmt::Display for GridSliceState {
 }
 
 impl GridSliceState {
-    fn new(
-        len: GridLen,
+    fn pass_non_zero_len_has_pos(
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> Result<Self, ()> {
-        // the paper black-boxed how it generates the trominoes/nonominoes and the complexity here
-        // is enough for the 20 minutes, so I'll be going over the symmetries involved
-
-        // verify that every non-zero length id has a position
-        if !cur_id_to_len_byte
+    ) -> bool {
+        cur_id_to_len_byte
             .iter()
             .enumerate()
             .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
-        {
-            dbgwrap!("failed every non-zero length id has a position test");
-            Err(())
-        } else if cur_id_to_len_byte
+    }
+
+    fn pass_volume_divisible_by_piece_size(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        cur_id_to_len_byte
             .iter()
-            .map(|x| *x as GridVol)
-            .sum::<GridVol>()
-            % (len as GridVol)
-            != 0
-        {
-            // the total volume of all placed pieces must be divisible by the piece size
-            dbgwrap!("failed divisibility test");
-            Err(())
-        } else if !cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
+            .enumerate()
+            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
+    }
+
+    fn pass_no_more_pos_than_len(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
                     .iter()
                     .filter(|x| **x == id as u8)
                     .count()
-        }) {
-            // the id must have fewer (or equal) positions than length
-            dbgwrap!("failed more or equal positions than length");
-            Err(())
-        } else if !cur_pos_to_id_byte.iter().is_sorted() {
-            // verify that the pos is always increasing
-            dbgwrap!("failed increasing pos test");
-            Err(())
-        } else if !cur_id_to_len_byte.iter().is_sorted() {
-            // verify that the len is always increasing
-            dbgwrap!("failed increasing len test");
-            Err(())
-        } else if !cur_pos_to_id_byte
+        })
+    }
+
+    fn pass_id_len_always_inc(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        cur_id_to_len_byte.iter().is_sorted()
+    }
+
+    fn pass_every_pos_has_len(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        cur_pos_to_id_byte
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
-        {
-            dbgwrap!("failed every postion must have a positive length piece test");
-            Err(())
-        } else if cur_pos_to_id_byte // palindromic in piece length
+    }
+
+    fn pass_not_palindromic(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        !(cur_pos_to_id_byte // palindromic in piece length
             .iter()
             .map(|x| cur_id_to_len_byte[*x as usize])
             .eq(cur_pos_to_id_byte
@@ -120,7 +123,7 @@ impl GridSliceState {
                         let last_idx = x.0 - 1;
                         let curr_idx = x.0;
 
-                        assert![cur_pos_to_id_byte[curr_idx] >= cur_pos_to_id_byte[last_idx]];
+                        // assert![cur_pos_to_id_byte[curr_idx] >= cur_pos_to_id_byte[last_idx]];
 
                         // if we have already mapped this value, repeat it
                         // otherwise, if it has increased, add it to the map
@@ -135,24 +138,63 @@ impl GridSliceState {
                             Some(state.iter().max().unwrap().1 + 1)
                         }
                     } else {
+                        // take the lowest possible value for the given piece
+                        // note this is obviously wrong and should be fixed very very soon
                         state.push((cur_pos_to_id_byte[x.0], cur_pos_to_id_byte[x.0]));
                         Some(cur_pos_to_id_byte[x.0])
                     }
                 })
-                .lt(cur_pos_to_id_byte.iter().map(|x| *x))
-        {
-            // this one is a bit funky, had to take about seven pages of notes
-            //
-            // we need to canonicalize the form somehow, and there are cases where
-            // we have identical output wtih different pos_to_id mappings
-            dbgwrap!("failed the funky test");
-            Err(())
-        } else {
-            Ok(GridSliceState {
-                id_to_len: cur_id_to_len_byte.clone(),
-                pos_to_id: cur_pos_to_id_byte.clone(),
-            })
-        }
+                .lt(cur_pos_to_id_byte.iter().map(|x| *x)))
+    }
+
+    fn new(
+        len: GridLen,
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> Result<Self, ()> {
+        let checks = [
+            (
+                "non zero len has pos",
+                Self::pass_non_zero_len_has_pos
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "volume divisible by piece size",
+                Self::pass_volume_divisible_by_piece_size
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "no more pos than len",
+                Self::pass_no_more_pos_than_len
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "id len always inc",
+                Self::pass_id_len_always_inc
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "every pos has len",
+                Self::pass_every_pos_has_len
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "not palindromic",
+                Self::pass_not_palindromic
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+        ];
+
+        checks.iter().for_each(|x| {
+            if !(x.1)(&cur_id_to_len_byte, &cur_pos_to_id_byte) {
+                panic!("test {} failed for id_to_len: {:?}, pos_to_id: {:?}", x.0, cur_id_to_len_byte, cur_pos_to_id_byte)
+            }
+        });
+
+        Ok(GridSliceState {
+            id_to_len: cur_id_to_len_byte.clone(),
+            pos_to_id: cur_pos_to_id_byte.clone(),
+        })
     }
 
     fn has_unique_flip(&self) -> bool {
@@ -190,34 +232,44 @@ impl GridSliceRelation {
                         pos == x.pos_to_id.len() - 1 || x.pos_to_id[pos + 1] == *x_id;
                     let x_distinct_top =
                         x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
-                    
-                    let x_distinct_top_left = 
-                        pos == 0 || x.id_to_len[x.pos_to_id[pos - 1] as usize] == 3 && y.id_to_len[y.pos_to_id[pos - 1] as usize] == 1;
- 
-                    let x_distinct_top_right = 
-                        pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[pos + 1] as usize] == 3 && y.id_to_len[y.pos_to_id[pos + 1] as usize] == 1;
- 
+
+                    let x_distinct_top_left = pos == 0
+                        || x.id_to_len[x.pos_to_id[pos - 1] as usize] == 3
+                            && y.id_to_len[y.pos_to_id[pos - 1] as usize] == 1;
+
+                    let x_distinct_top_right = pos == x.pos_to_id.len() - 1
+                        || x.id_to_len[x.pos_to_id[pos + 1] as usize] == 3
+                            && y.id_to_len[y.pos_to_id[pos + 1] as usize] == 1;
+
                     let y_distinct_left = pos == 0 || y.pos_to_id[pos - 1] == *y_id;
                     let y_distinct_right =
                         pos == y.pos_to_id.len() - 1 || y.pos_to_id[pos + 1] == *y_id;
 
                     // no interior borders (i.e. no splits and no merges)
-                    let no_int_bord = 
-                        x_distinct_left as u8
-                         + x_distinct_top as u8
-                         + x_distinct_top_left as u8
-                         + y_distinct_left as u8 != 1;
+                    let no_int_bord = x_distinct_left as u8
+                        + x_distinct_top as u8
+                        + x_distinct_top_left as u8
+                        + y_distinct_left as u8
+                        != 1;
 
-                    dbgwrap![(x_distinct_left as u8, x_distinct_top as u8, x_distinct_top_left as u8, y_distinct_left as u8)];
+                    dbgwrap![
+                        "{:#?}",
+                        (
+                            x_distinct_left as u8,
+                            x_distinct_top as u8,
+                            x_distinct_top_left as u8,
+                            y_distinct_left as u8
+                        )
+                    ];
 
                     let y_id_vol = y.id_to_len[*y_id as usize] as i16;
-                    let y_id_pos_vol = y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
+                    let y_id_pos_vol =
+                        y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
                     let x_id_vol = x.id_to_len[*x_id as usize] as i16;
 
-                    dbgwrap![(y_id_vol, y_id_pos_vol, x_id_vol)];
+                    dbgwrap!["{:#?}", (y_id_vol, y_id_pos_vol, x_id_vol)];
 
-                    let exact_inc = x_distinct_top
-                        || y_id_vol - y_id_pos_vol == x_id_vol;
+                    let exact_inc = x_distinct_top || y_id_vol - y_id_pos_vol == x_id_vol;
 
                     no_int_bord && exact_inc
                 })
@@ -325,7 +377,7 @@ fn main() {
     match std::env::args().nth(1).unwrap().as_str() {
         "ss" => grid.slice_state.iter().for_each(|x| println!("{}", x)),
         "sr" => grid.slice_relation.iter().for_each(|x| println!("{}", x)),
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
@@ -414,26 +466,28 @@ mod tests {
             mod slice_state {
                 use super::*;
 
-                #[test]
-                fn test_trominoes_general_slice_state_funky() {
-                    let a = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).is_ok();
-                    let b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).is_ok();
-
-                    dbg![(a, b)];
-
-                    assert![(a ^ b) && (a || b)];
+                fn get_reference() -> Vec<GridSliceState> {
+                    vec![
+                        GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A
+                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(), // A'
+                        GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(), // A''
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(), // B
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![2, 0, 1]).unwrap(), // C
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 2, 0]).unwrap(), // D
+                        GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(), // E
+                        GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(), // F
+                        GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap(), // G
+                    ]
                 }
+
+                #[test]
+                fn test_trominoes_general_slice_state_reference() {
+                    get_reference();
+                }
+
                 #[test]
                 fn test_trominoes_general_slice_state() {
-                    let answer = vec![
-                        GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(),
-                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(),
-                        GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(),
-                        GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A, A' and A''
-                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(),
-                        GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(),
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(),
-                    ];
+                    let answer = get_reference();
                     let grid = Grid::new(3);
 
                     answer.iter().for_each(|x| {
@@ -460,7 +514,7 @@ mod tests {
                             i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
                         );
                     });
-                
+
                     assert![false];
                 }
             }
