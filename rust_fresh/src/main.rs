@@ -23,21 +23,7 @@ struct GridSliceState {
 
 impl std::fmt::Display for GridSliceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for i in 0..self.pos_to_id.len() {
-            write!(
-                f,
-                "{}",
-                if self.id_to_len[self.pos_to_id[i] as usize] == self.pos_to_id.len() as u8 {
-                    // NOTE: i'm really leaning on everything being a square
-                    "_____"
-                } else {
-                    "     "
-                }
-            )
-            .unwrap();
-        }
-        write!(f, "\n").unwrap();
-        for i in 0..self.pos_to_id.len() {
+       for i in 0..self.pos_to_id.len() {
             write!(
                 f,
                 "{} {} {}",
@@ -59,7 +45,6 @@ impl std::fmt::Display for GridSliceState {
             )
             .unwrap();
         }
-        write!(f, "\n").unwrap();
         Ok(())
     }
 }
@@ -130,16 +115,10 @@ impl GridSliceState {
                     // we use scan re-map it, effectively. note that enumerate comes
                     // after rev, so it indexes the reverse
 
-                    dbg![x];
-                    dbg![&state];
-
-                    let ret = if x.0 > 0 {
+                    if x.0 > 0 {
                         // if the underlying has decreased by one, increase ours by one
                         let last_idx = x.0 - 1;
                         let curr_idx = x.0;
-
-                        // dbg![last_idx;
-                        // dbg![curr_idx];
 
                         assert![cur_pos_to_id_byte[curr_idx] >= cur_pos_to_id_byte[last_idx]];
 
@@ -158,10 +137,7 @@ impl GridSliceState {
                     } else {
                         state.push((cur_pos_to_id_byte[x.0], cur_pos_to_id_byte[x.0]));
                         Some(cur_pos_to_id_byte[x.0])
-                    };
-                    dbg![ret];
-
-                    ret
+                    }
                 })
                 .lt(cur_pos_to_id_byte.iter().map(|x| *x))
         {
@@ -202,38 +178,53 @@ struct GridSliceRelation {
 impl GridSliceRelation {
     fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
         if {
-            // we can just map the current x_piece_id to y_piece_id and verify that the sum of
-            // positions made by the piece is equal to the length at the second stage
-            x.pos_to_id
+            // boundaries cannot be interior (i.e. it must be a polygon), so
+            // we verify that two distinct neighboring pieces cannot merge
+            !x.pos_to_id
                 .iter()
                 .zip(y.pos_to_id.iter())
-                .all(|(x_id, y_id)| {
-                    let discont =
+                .enumerate()
+                .all(|(pos, (x_id, y_id))| {
+                    let x_distinct_left = pos == 0 || x.pos_to_id[pos - 1] == *x_id;
+                    let x_distinct_right =
+                        pos == x.pos_to_id.len() - 1 || x.pos_to_id[pos + 1] == *x_id;
+                    let x_distinct_top =
                         x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
-                    let strict_inc = x.id_to_len[*x_id as usize] < y.id_to_len[*y_id as usize];
-                    let accounting = y.id_to_len[*y_id as usize] as i16
-                        == x.id_to_len[*x_id as usize] as i16
-                            + y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
+                    
+                    let x_distinct_top_left = 
+                        pos == 0 || x.id_to_len[x.pos_to_id[pos - 1] as usize] == 3 && y.id_to_len[y.pos_to_id[pos - 1] as usize] == 1;
+ 
+                    let x_distinct_top_right = 
+                        pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[pos + 1] as usize] == 3 && y.id_to_len[y.pos_to_id[pos + 1] as usize] == 1;
+ 
+                    let y_distinct_left = pos == 0 || y.pos_to_id[pos - 1] == *y_id;
+                    let y_distinct_right =
+                        pos == y.pos_to_id.len() - 1 || y.pos_to_id[pos + 1] == *y_id;
 
-                    dbgwrap!("attempting to combine\n{}{}", y, x);
-                    dbgwrap!("discont: {}", discont);
-                    dbgwrap!(
-                        "strict_inc: {} ({} < {})",
-                        strict_inc,
-                        x.id_to_len[*x_id as usize],
-                        y.id_to_len[*y_id as usize]
-                    );
-                    dbgwrap!(
-                        "accounting: {} ({} == {} - {})",
-                        accounting,
-                        y.id_to_len[*y_id as usize],
-                        x.id_to_len[*x_id as usize],
-                        y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as u8
-                    );
+                    // no interior borders (i.e. no splits and no merges)
+                    let no_int_bord = 
+                        x_distinct_left as u8
+                         + x_distinct_top as u8
+                         + x_distinct_top_left as u8
+                         + y_distinct_left as u8 != 1;
 
-                    discont || (strict_inc && accounting)
+                    dbgwrap![(x_distinct_left as u8, x_distinct_top as u8, x_distinct_top_left as u8, y_distinct_left as u8)];
+
+                    let y_id_vol = y.id_to_len[*y_id as usize] as i16;
+                    let y_id_pos_vol = y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
+                    let x_id_vol = x.id_to_len[*x_id as usize] as i16;
+
+                    dbgwrap![(y_id_vol, y_id_pos_vol, x_id_vol)];
+
+                    let exact_inc = x_distinct_top
+                        || y_id_vol - y_id_pos_vol == x_id_vol;
+
+                    no_int_bord && exact_inc
                 })
         } {
+            dbgwrap!("slice relation failed the interior border test");
+            Err(())
+        } else {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 // note: i think we only need to consider one symmetry, because any action on the
@@ -241,9 +232,14 @@ impl GridSliceRelation {
                 _coef: if x.has_unique_flip() { 2 } else { 1 },
                 _base: (0, 0),
             })
-        } else {
-            Err(())
         }
+    }
+}
+
+impl std::fmt::Display for GridSliceRelation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} -> {}*{}", self._func.0, self._coef, self._func.1).unwrap();
+        Ok(())
     }
 }
 
@@ -326,8 +322,11 @@ impl Grid {
 fn main() {
     let grid = Grid::new(3);
 
-    println!("slice_state: {:#?}", &grid.slice_state);
-    println!("slice_relation: {:#?}", &grid.slice_relation);
+    match std::env::args().nth(1).unwrap().as_str() {
+        "ss" => grid.slice_state.iter().for_each(|x| println!("{}", x)),
+        "sr" => grid.slice_relation.iter().for_each(|x| println!("{}", x)),
+        _ => unreachable!()
+    }
 }
 
 #[cfg(test)]
@@ -444,26 +443,25 @@ mod tests {
                     });
 
                     grid.slice_state.iter().for_each(|x| println!("{:?}", x));
-
                     assert_eq![grid.slice_state.len(), answer.len()];
-
-                    grid.slice_state.iter().for_each(|x| println!("{}", x));
                 }
             }
 
             mod slice_relation {
+                use super::*;
+
                 #[test]
                 fn test_trominoes_general_slice_relation() {
                     let grid = Grid::new(3);
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
-                            "{}:\n{:?}\n{:?} with coef {} and base ({}, {})",
+                            "{}:\n{}\n{} with coef {} and base ({}, {})",
                             i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
                         );
                     });
-
-                    // assert![false];
+                
+                    assert![false];
                 }
             }
         }
