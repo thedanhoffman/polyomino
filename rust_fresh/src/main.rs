@@ -103,48 +103,30 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        !(cur_pos_to_id_byte // palindromic in piece length
+        // either not equal to its reverse OR it is equal to its reverse but is in canonical form
+        cur_pos_to_id_byte
             .iter()
-            .map(|x| cur_id_to_len_byte[*x as usize])
-            .eq(cur_pos_to_id_byte
-                .iter()
-                .rev()
-                .map(|x| cur_id_to_len_byte[*x as usize]))
-            && cur_pos_to_id_byte
-                .iter()
-                .rev()
-                .enumerate()
-                .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
-                    // we use scan re-map it, effectively. note that enumerate comes
-                    // after rev, so it indexes the reverse
-
-                    if x.0 > 0 {
-                        // if the underlying has decreased by one, increase ours by one
-                        let last_idx = x.0 - 1;
-                        let curr_idx = x.0;
-
-                        // assert![cur_pos_to_id_byte[curr_idx] >= cur_pos_to_id_byte[last_idx]];
-
-                        // if we have already mapped this value, repeat it
-                        // otherwise, if it has increased, add it to the map
-
-                        if let Some(new_id) = state.iter().find(|x_| x_.0 == *x.1) {
-                            Some(new_id.1)
-                        } else {
-                            state.push((
-                                cur_pos_to_id_byte[curr_idx],
-                                state.iter().max().unwrap().1 + 1,
-                            ));
-                            Some(state.iter().max().unwrap().1 + 1)
-                        }
-                    } else {
-                        // take the lowest possible value for the given piece
-                        // note this is obviously wrong and should be fixed very very soon
-                        state.push((cur_pos_to_id_byte[x.0], cur_pos_to_id_byte[x.0]));
-                        Some(cur_pos_to_id_byte[x.0])
-                    }
+            .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
+                Some(if let Some(map) = state.iter().find(|y| y.0 == *x) {
+                    map.1
+                } else {
+                    // find the first ID in the new domain that
+                    //   1. has not already been mapped
+                    //   2. is of the same length as the source
+                    // find the first ID (in ascending order) that has
+                    //   1. not been already mapped (must preserve distinct)
+                    //   2. the current length mapping the new mapped length (cu
+                    state.push((
+                            *x,
+                            (0..cur_pos_to_id_byte.len()).find(|y| {
+                                state.iter().all(|z| z.0 != *y as u8) // not already been mapped
+                                    && cur_id_to_len_byte[*x as usize] == cur_id_to_len_byte[*y as usize] // identical length mappings
+                            }).unwrap() as u8
+                    ));
+                    state[state.len() - 1].1
                 })
-                .lt(cur_pos_to_id_byte.iter().map(|x| *x)))
+            })
+            .eq(cur_pos_to_id_byte.iter().map(|x| *x))
     }
 
     fn new(
@@ -185,16 +167,23 @@ impl GridSliceState {
             ),
         ];
 
-        checks.iter().for_each(|x| {
-            if !(x.1)(&cur_id_to_len_byte, &cur_pos_to_id_byte) {
-                panic!("test {} failed for id_to_len: {:?}, pos_to_id: {:?}", x.0, cur_id_to_len_byte, cur_pos_to_id_byte)
-            }
-        });
-
-        Ok(GridSliceState {
-            id_to_len: cur_id_to_len_byte.clone(),
-            pos_to_id: cur_pos_to_id_byte.clone(),
-        })
+        if let Some(fail) = checks
+            .iter()
+            .find(|x| !(x.1)(&cur_id_to_len_byte, &cur_pos_to_id_byte))
+        {
+            dbgwrap!(
+                "test {} failed for id_to_len: {:?}, pos_to_id: {:?}",
+                fail.0,
+                cur_id_to_len_byte,
+                cur_pos_to_id_byte
+            );
+            Err(())
+        } else {
+            Ok(GridSliceState {
+                id_to_len: cur_id_to_len_byte.clone(),
+                pos_to_id: cur_pos_to_id_byte.clone(),
+            })
+        }
     }
 
     fn has_unique_flip(&self) -> bool {
@@ -457,6 +446,22 @@ mod tests {
                 assert_eq![a(8), 1173];
                 assert_eq![a(9), 3127];
                 assert_eq![a(10), 8266];
+            }
+        }
+
+        mod unit {
+            use super::*;
+
+            mod slice_state {
+                use super::*;
+
+                fn test_trominoes_unit_slice_state_palindromic() {
+                    GridSliceState::new(3, &vec![2, 2, 3], &vec![2, 1, 0]).unwrap();
+                    GridSliceState::new(3, &vec![2, 2, 3], &vec![2, 0, 1]).unwrap();
+                    GridSliceState::new(3, &vec![2, 2, 3], &vec![0, 2, 1]).unwrap();
+                    GridSliceState::new(3, &vec![2, 2, 3], &vec![1, 0, 2]).unwrap();
+                    GridSliceState::new(3, &vec![2, 2, 3], &vec![0, 1, 2]).unwrap();
+                }
             }
         }
 
