@@ -1,5 +1,7 @@
 #![feature(is_sorted)]
 
+use itertools::Itertools;
+
 type GridLen = u8;
 type GridVol = u16;
 
@@ -64,10 +66,7 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        cur_id_to_len_byte
-            .iter()
-            .enumerate()
-            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
+        cur_id_to_len_byte.iter().map(|x| *x as usize).sum::<usize>() % 3 == 0
     }
 
     fn pass_no_more_pos_than_len(
@@ -99,15 +98,25 @@ impl GridSliceState {
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
     }
 
-    fn pass_not_palindromic(
+    fn pass_not_symmetric(
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        // either not equal to its reverse OR it is equal to its reverse but is in canonical form
+        todo!()
+    }
+
+    fn pass_not_isomorphic(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+    ) -> bool {
+        dbg![cur_id_to_len_byte];
+        dbg![cur_pos_to_id_byte];
+
         cur_pos_to_id_byte
             .iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
                 Some(if let Some(map) = state.iter().find(|y| y.0 == *x) {
+                    println!("mapping {}", map.1);
                     map.1
                 } else {
                     // find the first ID in the new domain that
@@ -116,17 +125,46 @@ impl GridSliceState {
                     // find the first ID (in ascending order) that has
                     //   1. not been already mapped (must preserve distinct)
                     //   2. the current length mapping the new mapped length (cu
+                    //
                     state.push((
                             *x,
-                            (0..cur_pos_to_id_byte.len()).find(|y| {
-                                state.iter().all(|z| z.0 != *y as u8) // not already been mapped
-                                    && cur_id_to_len_byte[*x as usize] == cur_id_to_len_byte[*y as usize] // identical length mappings
-                            }).unwrap() as u8
+                            cur_id_to_len_byte.iter().enumerate().find(|(y_id, y_len)| {
+                                state.iter().all(|z| z.0 != *y_id as u8) // not already been mapped
+                                    && **y_len == cur_id_to_len_byte[*x as usize]
+                            }).unwrap().0 as u8
                     ));
+                    println!("mapping {}", state[state.len() - 1].1);
                     state[state.len() - 1].1
                 })
             })
             .eq(cur_pos_to_id_byte.iter().map(|x| *x))
+    }
+
+    fn pass_not_disjoint(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>
+    ) -> bool {
+        // maximum distance between any two IDs on the slice is
+        // (n - 4) because the piece must bridge that gap on
+        // the upper/lower slice
+        
+        cur_pos_to_id_byte.iter().enumerate().scan(Vec::new(), |state: &mut Vec<(usize, u8)>, (x_pos, x_id)| {
+            Some(if let Some((y_pos, y_id)) = state.iter_mut().find(|(y_pos, y_id)| x_id == y_id) {
+                let ret = *y_pos == x_pos - 1 || (*y_pos as i8) < (cur_id_to_len_byte.len() as i8 - 4);
+                *y_pos = x_pos;
+                ret
+            } else {
+                state.push((x_pos, *x_id));
+                true
+            })
+        }).all(|x| x)
+    }
+
+    fn pass_not_isomorphic_symmetric(
+        cur_id_to_len_byte: &Vec<GridLen>,
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>
+    ) -> bool {
+        true
     }
 
     fn new(
@@ -161,10 +199,21 @@ impl GridSliceState {
                     as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
             ),
             (
-                "not palindromic",
-                Self::pass_not_palindromic
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                "not symmetric",
+                Self::pass_not_symmetric as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
             ),
+            (
+                "not isomorphic",
+                Self::pass_not_isomorphic as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
+            (
+                "not disjoint",
+                Self::pass_not_disjoint as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool
+            ),
+            (
+                "not isomorphic symmetric",
+                Self::pass_not_isomorphic_symmetric as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool
+            )
         ];
 
         if let Some(fail) = checks
@@ -454,13 +503,26 @@ mod tests {
 
             mod slice_state {
                 use super::*;
+                #[test]
+                fn test_trominoes_unit_slice_state_not_isomorphic_symmetric() {
+                    assert_eq![
+                        GridSliceState::pass_not_isomorphic_symmetric(&vec![0, 1, 2], &vec![1, 1, 2]) as usize +
+                            GridSliceState::pass_not_isomorphic_symmetric(&vec![0, 1, 2], &vec![1, 2, 2]) as usize,
+                        1
+                    ];
+                }
 
-                fn test_trominoes_unit_slice_state_palindromic() {
-                    GridSliceState::new(3, &vec![2, 2, 3], &vec![2, 1, 0]).unwrap();
-                    GridSliceState::new(3, &vec![2, 2, 3], &vec![2, 0, 1]).unwrap();
-                    GridSliceState::new(3, &vec![2, 2, 3], &vec![0, 2, 1]).unwrap();
-                    GridSliceState::new(3, &vec![2, 2, 3], &vec![1, 0, 2]).unwrap();
-                    GridSliceState::new(3, &vec![2, 2, 3], &vec![0, 1, 2]).unwrap();
+                #[test]
+                fn test_trominoes_unit_slice_state_not_isomorphic() {
+                    assert_eq![
+                        (0..3)
+                            .permutations(3)
+                            .map(|x| {
+                                GridSliceState::pass_not_isomorphic(&vec![3, 3, 3], &x) as usize
+                            })
+                            .sum::<usize>(),
+                        1
+                    ];
                 }
             }
         }
@@ -501,7 +563,9 @@ mod tests {
                         }
                     });
 
-                    grid.slice_state.iter().for_each(|x| println!("{:?}", x));
+                    grid.slice_state
+                        .iter()
+                        .for_each(|x| println!("{:?}\t{}", x, x));
                     assert_eq![grid.slice_state.len(), answer.len()];
                 }
             }
