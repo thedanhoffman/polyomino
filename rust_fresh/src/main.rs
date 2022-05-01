@@ -66,7 +66,12 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        cur_id_to_len_byte.iter().map(|x| *x as usize).sum::<usize>() % 3 == 0
+        cur_id_to_len_byte
+            .iter()
+            .map(|x| *x as usize)
+            .sum::<usize>()
+            % 3
+            == 0
     }
 
     fn pass_no_more_pos_than_len(
@@ -112,20 +117,32 @@ impl GridSliceState {
         // first half on another generation (which is unique up to symmetry, which is not
         // disqualified by another case), so we admit the case where first.iter().lt(second.iter())
 
-        let first_half = cur_pos_to_id_byte.iter().enumerate().filter(|x| x.0 > cur_id_to_len_byte.len() / 2).collect::<Vec<_>>();
-        let second_half = cur_pos_to_id_byte.iter().rev().enumerate().filter(|x| x.0 > cur_id_to_len_byte.len() / 2).collect::<Vec<_>>();
+        let first_half = cur_pos_to_id_byte
+            .iter()
+            .enumerate()
+            .filter(|x| x.0 < cur_pos_to_id_byte.len() / 2)
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
+        let second_half = cur_pos_to_id_byte
+            .iter()
+            .rev()
+            .enumerate()
+            .filter(|x| x.0 < cur_pos_to_id_byte.len() / 2)
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
+
         dbg![&first_half];
         dbg![&second_half];
-        first_half.iter().ge(second_half.iter())
+
+        // if we know the id_to_len must be increasing and we know that the left and right sides
+        // are equal, we have to explicitly check that the middle is connected to the left side
+        first_half.iter().le(second_half.iter())
     }
 
     fn pass_not_isomorphic(
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        dbg![cur_id_to_len_byte];
-        dbg![cur_pos_to_id_byte];
-
         cur_pos_to_id_byte
             .iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
@@ -141,13 +158,17 @@ impl GridSliceState {
                     //   2. the current length mapping the new mapped length (cu
                     //
                     state.push((
-                            *x,
-                            cur_id_to_len_byte.iter().enumerate().find(|(y_id, y_len)| {
+                        *x,
+                        cur_id_to_len_byte
+                            .iter()
+                            .enumerate()
+                            .find(|(y_id, y_len)| {
                                 state.iter().all(|z| z.0 != *y_id as u8) // not already been mapped
                                     && **y_len == cur_id_to_len_byte[*x as usize]
-                            }).unwrap().0 as u8
+                            })
+                            .unwrap()
+                            .0 as u8,
                     ));
-                    println!("mapping {}", state[state.len() - 1].1);
                     state[state.len() - 1].1
                 })
             })
@@ -156,27 +177,35 @@ impl GridSliceState {
 
     fn pass_not_disjoint(
         cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
         // maximum distance between any two IDs on the slice is
         // (n - 4) because the piece must bridge that gap on
         // the upper/lower slice
-        
-        cur_pos_to_id_byte.iter().enumerate().scan(Vec::new(), |state: &mut Vec<(usize, u8)>, (x_pos, x_id)| {
-            Some(if let Some((y_pos, y_id)) = state.iter_mut().find(|(y_pos, y_id)| x_id == y_id) {
-                let ret = *y_pos == x_pos - 1 || (*y_pos as i8) < (cur_id_to_len_byte.len() as i8 - 4);
-                *y_pos = x_pos;
-                ret
-            } else {
-                state.push((x_pos, *x_id));
-                true
+
+        cur_pos_to_id_byte
+            .iter()
+            .enumerate()
+            .scan(Vec::new(), |state: &mut Vec<(usize, u8)>, (x_pos, x_id)| {
+                Some(
+                    if let Some((y_pos, y_id)) = state.iter_mut().find(|(y_pos, y_id)| x_id == y_id)
+                    {
+                        let ret = *y_pos == x_pos - 1
+                            || (*y_pos as i8) < (cur_id_to_len_byte.len() as i8 - 4);
+                        *y_pos = x_pos;
+                        ret
+                    } else {
+                        state.push((x_pos, *x_id));
+                        true
+                    },
+                )
             })
-        }).all(|x| x)
+            .all(|x| x)
     }
 
     fn pass_not_isomorphic_symmetric(
         cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>
+        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
         true
     }
@@ -222,12 +251,13 @@ impl GridSliceState {
             ),
             (
                 "not disjoint",
-                Self::pass_not_disjoint as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool
+                Self::pass_not_disjoint as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
             ),
             (
                 "not isomorphic symmetric",
-                Self::pass_not_isomorphic_symmetric as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool
-            )
+                Self::pass_not_isomorphic_symmetric
+                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+            ),
         ];
 
         if let Some(fail) = checks
@@ -520,8 +550,14 @@ mod tests {
                 #[test]
                 fn test_trominoes_unit_slice_state_not_isomorphic_symmetric() {
                     assert_eq![
-                        GridSliceState::pass_not_isomorphic_symmetric(&vec![0, 1, 2], &vec![1, 1, 2]) as usize +
-                            GridSliceState::pass_not_isomorphic_symmetric(&vec![0, 1, 2], &vec![1, 2, 2]) as usize,
+                        GridSliceState::pass_not_isomorphic_symmetric(
+                            &vec![0, 1, 2],
+                            &vec![1, 1, 2]
+                        ) as usize
+                            + GridSliceState::pass_not_isomorphic_symmetric(
+                                &vec![0, 1, 2],
+                                &vec![1, 2, 2]
+                            ) as usize,
                         1
                     ];
                 }
@@ -550,7 +586,7 @@ mod tests {
                 fn get_reference() -> Vec<GridSliceState> {
                     vec![
                         GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A
-                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(), // A'
+                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).unwrap(), // A'
                         GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(), // A''
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(), // B
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 0, 2]).unwrap(), // C
@@ -571,15 +607,25 @@ mod tests {
                     let answer = get_reference();
                     let grid = Grid::new(3);
 
-                    answer.iter().for_each(|x| {
-                        if !answer.iter().any(|y| x == y) {
-                            println!("cannot find\n{}\nin results", x);
-                        }
-                    });
-
                     grid.slice_state
                         .iter()
                         .for_each(|x| println!("{:?}\t{}", x, x));
+
+                    dbg![grid.slice_state.len()];
+                    dbg![answer.len()];
+
+                    answer.iter().for_each(|x| {
+                        if !grid.slice_state.iter().any(|y| x == y) {
+                            panic!("cannot find {} in results", x);
+                        }
+                    });
+
+                    grid.slice_state.iter().for_each(|x| {
+                        if !answer.iter().any(|y| x == y) {
+                            panic!("cannot find {} in answers", x);
+                        }
+                    });
+
                     assert_eq![grid.slice_state.len(), answer.len()];
                 }
             }
