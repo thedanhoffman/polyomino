@@ -102,7 +102,21 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        todo!()
+        // symmetry is completely encoded in pos_to_id, so we need to find some property which can
+        // be verified independently of what has been generated already
+        //
+        // if the first half is equal to the second half, then it must be admitted because there is
+        // no symmetric flip that can be generated without violating one of the other constraints
+        //
+        // if the first half is not equal to the second half, then the second half will be the
+        // first half on another generation (which is unique up to symmetry, which is not
+        // disqualified by another case), so we admit the case where first.iter().lt(second.iter())
+
+        let first_half = cur_pos_to_id_byte.iter().enumerate().filter(|x| x.0 > cur_id_to_len_byte.len() / 2).collect::<Vec<_>>();
+        let second_half = cur_pos_to_id_byte.iter().rev().enumerate().filter(|x| x.0 > cur_id_to_len_byte.len() / 2).collect::<Vec<_>>();
+        dbg![&first_half];
+        dbg![&second_half];
+        first_half.iter().ge(second_half.iter())
     }
 
     fn pass_not_isomorphic(
@@ -539,11 +553,11 @@ mod tests {
                         GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(), // A'
                         GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(), // A''
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(), // B
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![2, 0, 1]).unwrap(), // C
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 2, 0]).unwrap(), // D
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 0, 2]).unwrap(), // C
+                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 2, 1]).unwrap(), // D
                         GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(), // E
                         GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap(), // G
+                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(), // G
                     ]
                 }
 
