@@ -116,7 +116,7 @@ impl GridSliceState {
         // if the first half is not equal to the second half, then the second half will be the
         // first half on another generation (which is unique up to symmetry, which is not
         // disqualified by another case), so we admit the case where first.iter().lt(second.iter())
-
+/*
         let first_half = cur_pos_to_id_byte
             .iter()
             .enumerate()
@@ -134,9 +134,37 @@ impl GridSliceState {
         dbg![&first_half];
         dbg![&second_half];
 
+        // note i think my old line of thinking only works in cases where all ids are
+        // of the same length (although a flip is valid, 
+
         // if we know the id_to_len must be increasing and we know that the left and right sides
         // are equal, we have to explicitly check that the middle is connected to the left side
-        first_half.iter().le(second_half.iter())
+        /*first_half.iter().le(second_half.iter()) &&*/ match (
+            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) + 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2)],
+            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) - 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2)],
+            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) - 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) + 1]
+        ) {
+            (true, true, _) => true,
+            (true, false, _) => false,
+            (false, true, _) => true,
+            (false, false, _) => true
+        }
+*/
+        cur_pos_to_id_byte.iter().le(cur_pos_to_id_byte.iter().rev()) && {
+            // note the following doesn't generalize well beyond the 3 case because of the
+            // possibility of IDs never re-occurring in the slice (i.e. its impossible for a piece
+            // to go up, over, and down below the pentomino case)
+           
+            // make a boolean map which is the same ID in the previous position and check that the
+            // forward and reverse are identical
+            cur_pos_to_id_byte.iter().enumerate().map(|x| {
+                if x.0 == 0 {
+                    true
+                } else {
+                    *x.1 == cur_pos_to_id_byte[x.0 - 1]
+                }
+            })
+        }
     }
 
     fn pass_not_isomorphic(
@@ -616,13 +644,13 @@ mod tests {
 
                     answer.iter().for_each(|x| {
                         if !grid.slice_state.iter().any(|y| x == y) {
-                            panic!("cannot find {} in results", x);
+                            panic!("cannot find {:?} {} in results", x, x);
                         }
                     });
 
                     grid.slice_state.iter().for_each(|x| {
                         if !answer.iter().any(|y| x == y) {
-                            panic!("cannot find {} in answers", x);
+                            panic!("cannot find {:?} {} in answers", x, x);
                         }
                     });
 
