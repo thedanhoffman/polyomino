@@ -1,7 +1,4 @@
 #![feature(is_sorted)]
-
-use itertools::Itertools;
-
 type GridLen = u8;
 type GridVol = u16;
 
@@ -64,7 +61,7 @@ impl GridSliceState {
 
     fn pass_volume_divisible_by_piece_size(
         cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
         cur_id_to_len_byte
             .iter()
@@ -196,7 +193,8 @@ impl GridSliceState {
             .enumerate()
             .scan(Vec::new(), |state: &mut Vec<(usize, u8)>, (x_pos, x_id)| {
                 Some(
-                    if let Some((y_pos, y_id)) = state.iter_mut().find(|(y_pos, y_id)| x_id == y_id)
+                    if let Some((y_pos, _y_id)) =
+                        state.iter_mut().find(|(_y_pos, y_id)| x_id == y_id)
                     {
                         let ret = *y_pos == x_pos - 1
                             || (*y_pos as i8) < (cur_id_to_len_byte.len() as i8 - 4);
@@ -212,14 +210,14 @@ impl GridSliceState {
     }
 
     fn pass_not_isomorphic_symmetric(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+        _cur_id_to_len_byte: &Vec<GridLen>,
+        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
         true
     }
 
     fn new(
-        len: GridLen,
+        _len: GridLen,
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> Result<Self, ()> {
@@ -318,7 +316,7 @@ impl GridSliceRelation {
                 .enumerate()
                 .all(|(pos, (x_id, y_id))| {
                     let x_distinct_left = pos == 0 || x.pos_to_id[pos - 1] == *x_id;
-                    let x_distinct_right =
+                    let _x_distinct_right =
                         pos == x.pos_to_id.len() - 1 || x.pos_to_id[pos + 1] == *x_id;
                     let x_distinct_top =
                         x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
@@ -327,12 +325,12 @@ impl GridSliceRelation {
                         || x.id_to_len[x.pos_to_id[pos - 1] as usize] == 3
                             && y.id_to_len[y.pos_to_id[pos - 1] as usize] == 1;
 
-                    let x_distinct_top_right = pos == x.pos_to_id.len() - 1
+                    let _x_distinct_top_right = pos == x.pos_to_id.len() - 1
                         || x.id_to_len[x.pos_to_id[pos + 1] as usize] == 3
                             && y.id_to_len[y.pos_to_id[pos + 1] as usize] == 1;
 
                     let y_distinct_left = pos == 0 || y.pos_to_id[pos - 1] == *y_id;
-                    let y_distinct_right =
+                    let _y_distinct_right =
                         pos == y.pos_to_id.len() - 1 || y.pos_to_id[pos + 1] == *y_id;
 
                     // no interior borders (i.e. no splits and no merges)
@@ -462,6 +460,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
 
     mod trominoes {
         use super::*;
