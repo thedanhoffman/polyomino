@@ -7,13 +7,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
 macro_rules! dbgwrap {
-    ($($args:expr),*) => {};
+    ($($args:expr),*) => { println!($($args),*) }
 }
+
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => {};
+//}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -115,7 +115,7 @@ impl GridSliceState {
 
         dbg![&cur_id_to_len_byte];
         dbg![&cur_pos_to_id_byte];
-       
+
         // ideally there would be a filter_scan in Rust but I don't think that exists, so we have
         // to use a for loop here (or something equally ugly)
 
@@ -139,7 +139,12 @@ impl GridSliceState {
             ret
         };
         dbg![&run_vec];
-        run_vec[0] > run_vec[run_vec.len() - 1] || run_vec.len() == 1 || run_vec.iter().all(|x| *x == run_vec[0])
+
+        // note the last condition here makes assumptions that don't generalize beyond the 3 case
+        run_vec[0] > run_vec[run_vec.len() - 1]
+            || run_vec.len() == 1
+            || (run_vec.iter().all(|x| *x == 1)
+                && cur_pos_to_id_byte[0] < cur_pos_to_id_byte[cur_pos_to_id_byte.len() - 1])
     }
 
     fn pass_not_isomorphic(
@@ -337,22 +342,10 @@ impl GridSliceRelation {
                         + y_distinct_left as u8
                         != 1;
 
-                    dbgwrap![
-                        "{:#?}",
-                        (
-                            x_distinct_left as u8,
-                            x_distinct_top as u8,
-                            x_distinct_top_left as u8,
-                            y_distinct_left as u8
-                        )
-                    ];
-
                     let y_id_vol = y.id_to_len[*y_id as usize] as i16;
                     let y_id_pos_vol =
                         y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
                     let x_id_vol = x.id_to_len[*x_id as usize] as i16;
-
-                    dbgwrap!["{:#?}", (y_id_vol, y_id_pos_vol, x_id_vol)];
 
                     let exact_inc = x_distinct_top || y_id_vol - y_id_pos_vol == x_id_vol;
 
