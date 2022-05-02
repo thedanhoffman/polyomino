@@ -7,13 +7,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
-
 //macro_rules! dbgwrap {
-//    ($($args:expr),*) => {};
+//    ($($args:expr),*) => { println!($($args),*) }
 //}
+
+macro_rules! dbgwrap {
+    ($($args:expr),*) => {};
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -107,64 +107,39 @@ impl GridSliceState {
         cur_id_to_len_byte: &Vec<GridLen>,
         cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
     ) -> bool {
-        // symmetry is completely encoded in pos_to_id, so we need to find some property which can
-        // be verified independently of what has been generated already
-        //
-        // if the first half is equal to the second half, then it must be admitted because there is
-        // no symmetric flip that can be generated without violating one of the other constraints
-        //
-        // if the first half is not equal to the second half, then the second half will be the
-        // first half on another generation (which is unique up to symmetry, which is not
-        // disqualified by another case), so we admit the case where first.iter().lt(second.iter())
-/*
-        let first_half = cur_pos_to_id_byte
-            .iter()
-            .enumerate()
-            .filter(|x| x.0 < cur_pos_to_id_byte.len() / 2)
-            .map(|x| x.1)
-            .collect::<Vec<_>>();
-        let second_half = cur_pos_to_id_byte
-            .iter()
-            .rev()
-            .enumerate()
-            .filter(|x| x.0 < cur_pos_to_id_byte.len() / 2)
-            .map(|x| x.1)
-            .collect::<Vec<_>>();
+        // piece ids are isomorphic to each other, so we can't do anything about the values
+        // themselves, we can only do things with equality between them. we define a canonical
+        // representation of a slice state by putting the longest contiguous run of equal ids first
+        // and using the case of a singular contiguous run always being true (as this is guaranteed
+        // to be identical becuase of the isomorphism symmetry)
 
-        dbg![&first_half];
-        dbg![&second_half];
+        dbg![&cur_id_to_len_byte];
+        dbg![&cur_pos_to_id_byte];
+       
+        // ideally there would be a filter_scan in Rust but I don't think that exists, so we have
+        // to use a for loop here (or something equally ugly)
 
-        // note i think my old line of thinking only works in cases where all ids are
-        // of the same length (although a flip is valid, 
+        let run_vec = {
+            let mut ret = Vec::new();
+            let mut start_pos = 0;
+            let mut start_val = cur_pos_to_id_byte[0];
+            for i in cur_pos_to_id_byte.iter().enumerate() {
+                let x_pos = i.0;
+                let x_val = *i.1;
 
-        // if we know the id_to_len must be increasing and we know that the left and right sides
-        // are equal, we have to explicitly check that the middle is connected to the left side
-        /*first_half.iter().le(second_half.iter()) &&*/ match (
-            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) + 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2)],
-            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) - 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2)],
-            cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) - 1] == cur_pos_to_id_byte[(cur_pos_to_id_byte.len() / 2) + 1]
-        ) {
-            (true, true, _) => true,
-            (true, false, _) => false,
-            (false, true, _) => true,
-            (false, false, _) => true
-        }
-*/
-        cur_pos_to_id_byte.iter().le(cur_pos_to_id_byte.iter().rev()) && {
-            // note the following doesn't generalize well beyond the 3 case because of the
-            // possibility of IDs never re-occurring in the slice (i.e. its impossible for a piece
-            // to go up, over, and down below the pentomino case)
-           
-            // make a boolean map which is the same ID in the previous position and check that the
-            // forward and reverse are identical
-            cur_pos_to_id_byte.iter().enumerate().map(|x| {
-                if x.0 == 0 {
-                    true
-                } else {
-                    *x.1 == cur_pos_to_id_byte[x.0 - 1]
+                dbg![(x_pos, x_val)];
+                if start_val != x_val {
+                    dbg![(x_pos, x_val)];
+                    ret.push(x_pos - start_pos);
+                    start_pos = x_pos;
+                    start_val = x_val;
                 }
-            })
-        }
+            }
+            ret.push(cur_pos_to_id_byte.len() - start_pos);
+            ret
+        };
+        dbg![&run_vec];
+        run_vec[0] > run_vec[run_vec.len() - 1] || run_vec.len() == 1 || run_vec.iter().all(|x| *x == run_vec[0])
     }
 
     fn pass_not_isomorphic(
@@ -621,7 +596,7 @@ mod tests {
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 2, 1]).unwrap(), // D
                         GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(), // E
                         GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(), // G
+                        GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap(), // G
                     ]
                 }
 
