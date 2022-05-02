@@ -265,15 +265,35 @@ impl GridSliceState {
             })
         }
     }
+
+    fn non_canonical_equal(a: &GridSliceState, b: &GridSliceState) -> bool {
+        // note the overloaded equality operator is for the *canonical form*
+        println!("checking {} and {}", a, b);
+        format!["{}", a] == format!["{}", b]
+    }
+
+    fn reverse(mut a: GridSliceState) -> GridSliceState {
+        a.pos_to_id.reverse();
+        a
+    }
+
+    fn has_non_canonical_unique_flip(&self) -> bool {
+        format!["{}", Self::reverse(self.clone())] != format!["{}", self]
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
+    pub _piece_map: Vec<u8>,
 }
 
 impl GridSliceRelation {
-    fn pass_no_int_bord(x: &GridSliceState, y: &GridSliceState) -> bool {
+    // note both of these functions are broken because a height of three is not a sufficient
+    // condition for an upper border (look at the case of (l) in the paper), so we need to be
+    // smarter about how we define borders between pieces
+
+    fn pass_no_int_bord(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
         // note this, again, is specific to the 3x3 case but can be generalized through some
         // recursive function. i don't like doing this but its probably best to have a correct
         // baseline to work from
@@ -283,9 +303,9 @@ impl GridSliceRelation {
         // intersection has more than one edge. we have an edge case to count eges of the square as
         // borders for obvious reasons
         x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
-            let cross_left = x.id_to_len[*x_id as usize] == 3;
-            let cross_right =
-                x_pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[x_pos + 1] as usize] == 3;
+            let cross_left = piece_map[x.pos_to_id[x_pos] as usize] != y.pos_to_id[x_pos];
+            let cross_right = x_pos == x.pos_to_id.len() - 1
+                || piece_map[x.pos_to_id[x_pos + 1] as usize] != y.pos_to_id[x_pos + 1];
             let cross_up =
                 x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
             let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id[x_pos + 1];
@@ -294,56 +314,111 @@ impl GridSliceRelation {
         })
     }
 
-    fn pass_inc_vol(x: &GridSliceState, y: &GridSliceState) -> bool {
+    fn pass_inc_vol(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
         // the volume of a piece must increase by the number of times it occurs in the next slice.
         // we know a piece occurs in the next slice if the length is less than three and we map the
         // x piece id to the y piece id because the ids are only unique within a slice)
 
-        x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
-            let y_id = y.pos_to_id[x_pos];
-            let y_pos_vol = y
-                .pos_to_id
-                .iter()
-                .filter(|y_id_cur| **y_id_cur == y_id)
-                .count() as u8;
+        piece_map.iter().enumerate().all(|a| {
+            let x_id = a.0 as u8;
+            let y_id = *a.1;
 
-            // case (h) in the paper requires a position volume of the y piece onto tye y and x
-            // (the y piece wraps around to a piece on the x slice which is not our current, and we
-            // need to consider that when verifying the marginal increase in volume is the
-            // difference in positional area)
-            let y_x_pos_vol = y_pos_vol
-                + x.pos_to_id
+            if y_id != 3 {
+                let y_pos_vol = y
+                    .pos_to_id
                     .iter()
-                    .enumerate()
-                    .filter(|(x_pos_cur, x_id_cur)| {
-                        // if the dirct upper id is equal to the current y id
-                        x.id_to_len[**x_id_cur as usize] != 3 && y.pos_to_id[*x_pos_cur] == y_id
-                    })
+                    .filter(|y_id_cur| **y_id_cur == y_id)
                     .count() as u8;
 
-            x.id_to_len[*x_id as usize] == 3
-                && y_x_pos_vol == y.id_to_len[y.pos_to_id[x_pos] as usize]
-                || { y.id_to_len[y_id as usize] == y_pos_vol + x.id_to_len[*x_id as usize] }
+                // the x piece id length plus the number of positions in the new slice is the
+                // length of the y piece id
+                x.id_to_len[x_id as usize] + y_pos_vol == y.id_to_len[y_id as usize]
+            } else {
+                // either the piece id is unused or it is full
+                x.id_to_len[x_id as usize] == 3 || x.id_to_len[x_id as usize] == 0
+            }
+        }) && y.id_to_len.iter().enumerate().all(|a| {
+            let y_id = a.0 as u8;
+            let y_len = *a.1;
+
+            if !piece_map.iter().any(|y_id_cur| *y_id_cur == y_id) {
+                // if the current piece has not been mapped from the x id, the volume must be the
+                // same as the positional volume
+                let y_pos_vol = y
+                    .pos_to_id
+                    .iter()
+                    .filter(|y_id_cur| **y_id_cur == y_id)
+                    .count() as u8;
+
+                y_pos_vol == y.id_to_len[y_id as usize]
+            } else {
+                true
+            }
         })
     }
 
-    fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
+    fn pass_map_valid_domain(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+        assert![piece_map.len() == 3];
+
+        x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == 3 { piece_map[x_id] == 3 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
+                    && y.id_to_len.iter().enumerate().all(|(y_id, y_len)| if *y_len == 0 { piece_map.iter().filter(|y_id_cur| **y_id_cur == y_id as u8).count() == 0 } else { true }) // if the length of a piece in y is zero, then it does not map
+    }
+
+    fn pass_connected(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+        // verify that each x<->y mapping have a connecting between them
+        // note: this might also not generalize beyond the 3 case
+
+        piece_map.iter().enumerate().all(|a| {
+            let x_id = a.0 as u8;
+            let y_id = *a.1;
+
+            // either the map doesn't apply or there exists a connection between the ids
+            y_id == 3
+                || (0..piece_map.len())
+                    .any(|pos| x.pos_to_id[pos] == x_id && y.pos_to_id[pos] == y_id)
+        })
+    }
+
+    fn new(
+        _len: GridLen,
+        x: &GridSliceState,
+        y: &GridSliceState,
+        piece_map: &Vec<u8>,
+    ) -> Result<Self, ()> {
+        // note it might be a good idea to make these fn casts into a type alias
         let checks = [
             (
                 "no int bord",
-                Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState) -> bool,
+                Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
             ),
             (
                 "inc vol",
-                Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState) -> bool,
+                Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+            ),
+            (
+                "map valid domain",
+                Self::pass_map_valid_domain
+                    as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+            ),
+            (
+                "connected",
+                Self::pass_connected as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
             ),
         ];
-        if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y)) {
-            dbgwrap!("test {} failed for {} -> {}", fail.0, x, y);
+        if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map)) {
+            println!(
+                "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?}",
+                fail.0, x, y, x, y, piece_map
+            );
             Err(())
         } else {
+            println!(
+                "tests passed for {} -> {} ({:?} -> {:?}) with piece_map {:?}",
+                x, y, x, y, piece_map
+            );
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
+                _piece_map: piece_map.clone(),
             })
         }
     }
@@ -364,6 +439,21 @@ struct Grid {
 }
 
 impl Grid {
+    fn add_with_carry(val: &mut Vec<GridLen>, min: u8, max: u8) -> bool {
+        let mut pos = 0;
+        while pos < val.len() && val[pos] == max {
+            val[pos] = min;
+            pos += 1;
+        }
+
+        if pos < val.len() as usize {
+            val[pos] += 1;
+            true
+        } else {
+            false
+        }
+    }
+
     fn new_slice_state(len: GridLen) -> Vec<GridSliceState> {
         // generate all slice states individually
         // note: this is a very naive way of doing it, but should be updated by the time I need to
@@ -410,12 +500,21 @@ impl Grid {
         len: GridLen,
         slice_state: &Vec<GridSliceState>,
     ) -> Vec<GridSliceRelation> {
+        assert![len == 3];
+
         slice_state
             .iter()
             .flat_map(move |x| {
-                slice_state
-                    .iter()
-                    .flat_map(move |y| GridSliceRelation::new(len, x, y))
+                slice_state.iter().flat_map(move |y| {
+                    // note i should do all add_with_carry uses like this
+                    (0..4).flat_map(move |first| {
+                        (0..4).flat_map(move |second| {
+                            (0..4).flat_map(move |third| {
+                                GridSliceRelation::new(len, x, y, &vec![first, second, third])
+                            })
+                        })
+                    })
+                })
             })
             .collect::<Vec<_>>()
     }
@@ -432,7 +531,7 @@ impl Grid {
     }
 
     fn find_slice_by_render(&self, a: &'static str) -> GridSliceState {
-         self.slice_state
+        self.slice_state
             .iter()
             .find(|x| format!["{}", x] == a)
             .unwrap()
@@ -443,35 +542,57 @@ impl Grid {
         self.find_slice_by_render("| 3    3    3 |")
     }
 
-    fn solve_iter(&self, slice_state: GridSliceState, pos: u8) -> u64 {
+    fn solve_iter(
+        &self,
+        slice_state: GridSliceState,
+        stack: &mut Vec<GridSliceState>,
+        tiling: &mut Vec<Vec<GridSliceState>>,
+    ) {
         // note we don't need to define a base case for the recurrence because it is inherently
         // periodic
 
-        let base_case = {
-            slice_state == self.find_slice_by_render("| 3    3    3 |")
+        // note this is a bit wonky. we use | 3    3    3 | as the top of the square and work from
+        // there, but we don't render this since it isn't a real tile (it only has the properties
+        // of the edge of a cube because the tiling is inherently periodic)
+
+        // note we actually generate len + 2 tilings but force the top and bottom to be a
+        // horizontal piece (identical behavior to the edge of the square)
+
+        stack.push(slice_state.clone());
+
+        if stack.len() as u8 == self._len + 2 {
+            if slice_state == self.solve_base() {
+                tiling.push(stack.clone());
+            }
+        } else {
+            self.slice_relation.iter().enumerate().for_each(|x| {
+                if GridSliceState::non_canonical_equal(&x.1._func.1, &slice_state) {
+                    self.solve_iter(x.1._func.0.clone(), stack, tiling);
+                } else if GridSliceState::non_canonical_equal(
+                    &GridSliceState::reverse(x.1._func.1.clone()),
+                    &slice_state,
+                ) {
+                    todo!();
+                    self.solve_iter(GridSliceState::reverse(x.1._func.0.clone()), stack, tiling);
+                }
+            });
         };
 
-        if base_case && pos != self._len {
-            1
-        } else if pos == 0 {
-            0
-        } else {
-            self.slice_relation
-                .iter()
-                .map(|x| {
-                    // find all relations where the current state is the result
-                    self.slice_relation
-                        .iter()
-                        .filter(|x| x._func.1 == slice_state)
-                        .map(|x| self.solve_iter(x._func.0.clone(), pos - 1))
-                        .sum::<u64>()
-                })
-                .sum()
-        }
+        stack.truncate(stack.len() - 1);
     }
 
-    fn solve(&self) -> u64 {
-        self.solve_iter(self.solve_base(), self._len)
+    fn solve(&self) -> usize {
+        let mut stack = Vec::new();
+        let mut tiling = Vec::new();
+        self.solve_iter(self.solve_base(), &mut stack, &mut tiling);
+
+        println!("tilings");
+        tiling.iter().for_each(|x| {
+            x.iter().for_each(|y| println!("{}", y));
+            println!("");
+        });
+
+        tiling.len()
     }
 }
 
@@ -640,66 +761,69 @@ mod tests {
             mod slice_relation {
                 use super::*;
 
-                fn get_reference() -> Vec<GridSliceRelation> {
-                    let slice_state = Grid::new_slice_state(3);
-                    let find = |a: &'static str| -> &GridSliceState {
-                        slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
-                    };
+                /*
+                                fn get_reference() -> Vec<GridSliceRelation> {
+                                    let slice_state = Grid::new_slice_state(3);
+                                    let find = |a: &'static str| -> &GridSliceState {
+                                        slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
+                                    };
 
-                    [
-                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |"),
-                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |"),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |"),
-                        ("| 3    3    3 |", "| 2    2 || 1 |"),
-                        ("| 3    3    3 |", "| 3    3    3 |"),
-                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |"),
-                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |"),
-                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |"),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |"),
-                        ("| 3    3 || 3 |", "| 3    3    3 |"),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |"),
-                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |"),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |"),
-                    ]
-                    .iter()
-                    .map(|x| {
-                        let ret = GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap();
-                        ret
-                    })
-                    .collect::<Vec<_>>()
-                }
+                                    [
+                                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |"),
+                                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |"),
+                                        ("| 3    3    3 |", "| 1 || 1 || 1 |"),
+                                        ("| 3    3    3 |", "| 2    2 || 1 |"),
+                                        ("| 3    3    3 |", "| 3    3    3 |"),
+                                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |"),
+                                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |"),
+                                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |"),
+                                        ("| 3    3 || 3 |", "| 2    2 || 1 |"),
+                                        ("| 3    3 || 3 |", "| 3    3    3 |"),
+                                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |"),
+                                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |"),
+                                        ("| 3 || 3 || 3 |", "| 3    3    3 |"),
+                                    ]
+                                    .iter()
+                                    .map(|x| {
+                                        let ret = GridSliceRelation::new(3, find(x.0), find(x.1), todo!()).unwrap();
+                                        ret
+                                    })
+                                    .collect::<Vec<_>>()
+                                }
 
-                #[test]
-                fn test_trominoes_general_slice_relation_reference() {
-                    get_reference();
-                }
-
+                                #[test]
+                                fn test_trominoes_general_slice_relation_reference() {
+                                    get_reference();
+                                }
+                */
                 #[test]
                 fn test_trominoes_general_slice_relation() {
                     let grid = Grid::new(3);
-                    let answers = get_reference();
+                    // let answers = get_reference();
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
-                        println!(
-                            "{}: {} -> {}",
-                            i, x._func.0, x._func.1
-                        );
+                        println!("{}: {} -> {} with piece_map {:?}", i, x._func.0, x._func.1, x._piece_map);
                     });
 
-                    answers.iter().for_each(|x| {
-                        if !grid.slice_relation.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in slice_relation", x, x);
-                        }
-                    });
+                    assert![false];
 
-                    grid.slice_relation.iter().for_each(|x| {
-                        if !answers.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in answers", x, x)
-                        }
-                    });
+                    /*
+                                        answers.iter().for_each(|x| {
+                                            if !grid.slice_relation.iter().any(|y| x == y) {
+                                                panic!("cannot find {:?} {} in slice_relation", x, x);
+                                            }
+                                        });
+
+                                        grid.slice_relation.iter().for_each(|x| {
+                                            if !answers.iter().any(|y| x == y) {
+                                                panic!("cannot find {:?} {} in answers", x, x)
+                                            }
+                                        });
+                    */
                 }
             }
 
+            /*
             mod solve {
                 use super::*;
 
@@ -709,6 +833,7 @@ mod tests {
                     assert_eq![grid.solve(), 10];
                 }
             }
+            */
         }
     }
 }
