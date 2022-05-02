@@ -353,7 +353,8 @@ impl GridSliceRelation {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 _coef: 1,
-                _base: if x.id_to_len == vec![0, 0, 3] { // note i need to generalize this obviously
+                _base: if x.id_to_len == vec![0, 0, 3] {
+                    // note i need to generalize this obviously
                     println!("{} -> {}", x, y);
                     (0, 1)
                 } else {
@@ -444,6 +445,39 @@ impl Grid {
             slice_state,
             slice_relation,
         }
+    }
+
+    fn solve_base(&self) -> GridSliceState {
+        self.slice_state
+            .iter()
+            .find(|x| format!["{}", x] == "| 3    3    3 |")
+            .unwrap()
+            .clone()
+    }
+
+    fn solve_iter(&self, slice_state: GridSliceState, pos: u8) -> u64 {
+        self.slice_relation
+            .iter()
+            .map(|x| {
+                // find all relations where the current state is the result
+                self.slice_relation
+                    .iter()
+                    .filter(|x| x._func.1 == slice_state)
+                    .map(|x| {
+                        if pos == 1 {
+                            assert![x._base.0 == 0];
+                            x._base.1
+                        } else {
+                            self.solve_iter(x._func.0.clone(), pos - 1)
+                        }
+                    })
+                    .sum::<u64>()
+            })
+            .sum()
+    }
+
+    fn solve(&self) -> u64 {
+        self.solve_iter(self.solve_base(), self._len)
     }
 }
 
@@ -673,6 +707,19 @@ mod tests {
                             panic!("cannot find {:?} {} in answers", x, x)
                         }
                     });
+                }
+            }
+
+            mod solve {
+                use super::*;
+
+                #[test]
+                fn test_trominoes_general_solve() {
+                    let grid = Grid::new(3);
+                    assert_eq![
+                        grid.solve(),
+                        10
+                    ];
                 }
             }
         }
