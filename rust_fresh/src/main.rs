@@ -110,9 +110,6 @@ impl GridSliceState {
         // and using the case of a singular contiguous run always being true (as this is guaranteed
         // to be identical becuase of the isomorphism symmetry)
 
-        dbg![&cur_id_to_len_byte];
-        dbg![&cur_pos_to_id_byte];
-
         // ideally there would be a filter_scan in Rust but I don't think that exists, so we have
         // to use a for loop here (or something equally ugly)
 
@@ -124,9 +121,7 @@ impl GridSliceState {
                 let x_pos = i.0;
                 let x_val = *i.1;
 
-                dbg![(x_pos, x_val)];
                 if start_val != x_val {
-                    dbg![(x_pos, x_val)];
                     ret.push(x_pos - start_pos);
                     start_pos = x_pos;
                     start_val = x_val;
@@ -135,7 +130,6 @@ impl GridSliceState {
             ret.push(cur_pos_to_id_byte.len() - start_pos);
             ret
         };
-        dbg![&run_vec];
 
         // note the last condition here makes assumptions that don't generalize beyond the 3 case
         run_vec[0] > run_vec[run_vec.len() - 1]
@@ -276,8 +270,6 @@ impl GridSliceState {
 #[derive(Debug, Eq, PartialEq)]
 struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
-    pub _coef: u64,
-    pub _base: (u64, u64),
 }
 
 impl GridSliceRelation {
@@ -352,14 +344,6 @@ impl GridSliceRelation {
         } else {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
-                _coef: 1,
-                _base: if x.id_to_len == vec![0, 0, 3] {
-                    // note i need to generalize this obviously
-                    println!("{} -> {}", x, y);
-                    (0, 1)
-                } else {
-                    (0, 0)
-                },
             })
         }
     }
@@ -367,7 +351,7 @@ impl GridSliceRelation {
 
 impl std::fmt::Display for GridSliceRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} -> {}*{}", self._func.0, self._coef, self._func.1).unwrap();
+        write!(f, "{} -> {}", self._func.0, self._func.1).unwrap();
         Ok(())
     }
 }
@@ -447,33 +431,43 @@ impl Grid {
         }
     }
 
-    fn solve_base(&self) -> GridSliceState {
-        self.slice_state
+    fn find_slice_by_render(&self, a: &'static str) -> GridSliceState {
+         self.slice_state
             .iter()
-            .find(|x| format!["{}", x] == "| 3    3    3 |")
+            .find(|x| format!["{}", x] == a)
             .unwrap()
             .clone()
     }
 
+    fn solve_base(&self) -> GridSliceState {
+        self.find_slice_by_render("| 3    3    3 |")
+    }
+
     fn solve_iter(&self, slice_state: GridSliceState, pos: u8) -> u64 {
-        self.slice_relation
-            .iter()
-            .map(|x| {
-                // find all relations where the current state is the result
-                self.slice_relation
-                    .iter()
-                    .filter(|x| x._func.1 == slice_state)
-                    .map(|x| {
-                        if pos == 1 {
-                            assert![x._base.0 == 0];
-                            x._base.1
-                        } else {
-                            self.solve_iter(x._func.0.clone(), pos - 1)
-                        }
-                    })
-                    .sum::<u64>()
-            })
-            .sum()
+        // note we don't need to define a base case for the recurrence because it is inherently
+        // periodic
+
+        let base_case = {
+            slice_state == self.find_slice_by_render("| 3    3    3 |")
+        };
+
+        if base_case && pos != self._len {
+            1
+        } else if pos == 0 {
+            0
+        } else {
+            self.slice_relation
+                .iter()
+                .map(|x| {
+                    // find all relations where the current state is the result
+                    self.slice_relation
+                        .iter()
+                        .filter(|x| x._func.1 == slice_state)
+                        .map(|x| self.solve_iter(x._func.0.clone(), pos - 1))
+                        .sum::<u64>()
+                })
+                .sum()
+        }
     }
 
     fn solve(&self) -> u64 {
@@ -487,6 +481,7 @@ fn main() {
     match std::env::args().nth(1).unwrap().as_str() {
         "ss" => grid.slice_state.iter().for_each(|x| println!("{}", x)),
         "sr" => grid.slice_relation.iter().for_each(|x| println!("{}", x)),
+        "s" => println!("grid.solve(): {}", grid.solve()),
         _ => unreachable!(),
     }
 }
@@ -626,9 +621,6 @@ mod tests {
                         .iter()
                         .for_each(|x| println!("{:?}\t{}", x, x));
 
-                    dbg![grid.slice_state.len()];
-                    dbg![answer.len()];
-
                     answer.iter().for_each(|x| {
                         if !grid.slice_state.iter().any(|y| x == y) {
                             panic!("cannot find {:?} {} in results", x, x);
@@ -655,25 +647,23 @@ mod tests {
                     };
 
                     [
-                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", 1, (0, 0)),
-                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", 1, (0, 0)),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |", 1, (0, 1)),
-                        ("| 3    3    3 |", "| 2    2 || 1 |", 1, (0, 1)),
-                        ("| 3    3    3 |", "| 3    3    3 |", 1, (0, 1)),
-                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", 1, (0, 0)),
-                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |", 1, (0, 0)),
-                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |", 1, (0, 0)),
-                        ("| 3    3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
-                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |", 1, (0, 0)),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
+                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |"),
+                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |"),
+                        ("| 3    3    3 |", "| 1 || 1 || 1 |"),
+                        ("| 3    3    3 |", "| 2    2 || 1 |"),
+                        ("| 3    3    3 |", "| 3    3    3 |"),
+                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |"),
+                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |"),
+                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |"),
+                        ("| 3    3 || 3 |", "| 2    2 || 1 |"),
+                        ("| 3    3 || 3 |", "| 3    3    3 |"),
+                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |"),
+                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |"),
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |"),
                     ]
                     .iter()
                     .map(|x| {
                         let ret = GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap();
-                        assert![ret._coef == x.2];
-                        assert![ret._base == x.3];
                         ret
                     })
                     .collect::<Vec<_>>()
@@ -691,8 +681,8 @@ mod tests {
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
-                            "{}: {} -> {} with coef {} and base ({}, {})",
-                            i, x._func.0, x._func.1, x._coef, x._base.0, x._base.1
+                            "{}: {} -> {}",
+                            i, x._func.0, x._func.1
                         );
                     });
 
@@ -716,10 +706,7 @@ mod tests {
                 #[test]
                 fn test_trominoes_general_solve() {
                     let grid = Grid::new(3);
-                    assert_eq![
-                        grid.solve(),
-                        10
-                    ];
+                    assert_eq![grid.solve(), 10];
                 }
             }
         }
