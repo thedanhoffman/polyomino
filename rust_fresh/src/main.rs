@@ -272,18 +272,6 @@ impl GridSliceState {
             })
         }
     }
-
-    fn has_unique_flip(&self) -> bool {
-        !self
-            .pos_to_id
-            .iter()
-            .map(|x_id| self.id_to_len[*x_id as usize])
-            .eq(self
-                .pos_to_id
-                .iter()
-                .map(|x_id| self.id_to_len[*x_id as usize])
-                .rev())
-    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -305,11 +293,16 @@ impl GridSliceRelation {
         // borders for obvious reasons
         x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
             let cross_left = x.id_to_len[*x_id as usize] == 3;
-            let cross_right = x_pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[x_pos + 1] as usize] == 3;
-            let cross_up = x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
+            let cross_right =
+                x_pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[x_pos + 1] as usize] == 3;
+            let cross_up =
+                x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
             let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id[x_pos + 1];
 
-            println!("{} -> {} at {}\tcross: {} {} {} {}", x, y, x_pos, cross_left, cross_right, cross_up, cross_down);
+            println!(
+                "{} -> {} at {}\tcross: {} {} {} {}",
+                x, y, x_pos, cross_left, cross_right, cross_up, cross_down
+            );
             cross_left as u8 + cross_right as u8 + cross_up as u8 + cross_down as u8 != 1
         })
     }
@@ -321,25 +314,43 @@ impl GridSliceRelation {
 
         x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
             let y_id = y.pos_to_id[x_pos];
-            let y_pos_vol = y.pos_to_id.iter().filter(|y_id_cur| **y_id_cur == y_id).count() as u8;
-           
+            let y_pos_vol = y
+                .pos_to_id
+                .iter()
+                .filter(|y_id_cur| **y_id_cur == y_id)
+                .count() as u8;
+
             // case (h) in the paper requires a position volume of the y piece onto tye y and x
             // (the y piece wraps around to a piece on the x slice which is not our current, and we
             // need to consider that when verifying the marginal increase in volume is the
             // difference in positional area)
-            let y_x_pos_vol = y_pos_vol + x.pos_to_id.iter().enumerate().filter(|(x_pos_cur, x_id_cur)| {
-                // if the dirct upper id is equal to the current y id
-                x.id_to_len[**x_id_cur as usize] != 3 && y.pos_to_id[*x_pos_cur] == y_id
-            }).count() as u8;
+            let y_x_pos_vol = y_pos_vol
+                + x.pos_to_id
+                    .iter()
+                    .enumerate()
+                    .filter(|(x_pos_cur, x_id_cur)| {
+                        // if the dirct upper id is equal to the current y id
+                        x.id_to_len[**x_id_cur as usize] != 3 && y.pos_to_id[*x_pos_cur] == y_id
+                    })
+                    .count() as u8;
 
-            x.id_to_len[*x_id as usize] == 3 && y_x_pos_vol == y.id_to_len[y.pos_to_id[x_pos] as usize] || {
-                y.id_to_len[y_id as usize] == y_pos_vol + x.id_to_len[*x_id as usize]
-            }
+            x.id_to_len[*x_id as usize] == 3
+                && y_x_pos_vol == y.id_to_len[y.pos_to_id[x_pos] as usize]
+                || { y.id_to_len[y_id as usize] == y_pos_vol + x.id_to_len[*x_id as usize] }
         })
     }
 
     fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
-        let checks = [("no int bord", Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState) -> bool), ("inc vol", Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState) -> bool)];
+        let checks = [
+            (
+                "no int bord",
+                Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState) -> bool,
+            ),
+            (
+                "inc vol",
+                Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState) -> bool,
+            ),
+        ];
         if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y)) {
             dbgwrap!("test {} failed for {} -> {}", fail.0, x, y);
             Err(())
@@ -622,8 +633,11 @@ mod tests {
                         ("| 3    3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
                         ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
                         ("| 3 || 3 || 3 |", "| 2    2 || 1 |", 1, (0, 0)),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", 1, (0, 0))
-                    ].iter().map(|x| GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap()).collect::<Vec<_>>()
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
+                    ]
+                    .iter()
+                    .map(|x| GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap())
+                    .collect::<Vec<_>>()
                 }
 
                 #[test]
