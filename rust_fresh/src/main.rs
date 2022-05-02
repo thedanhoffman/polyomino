@@ -4,13 +4,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
-
 //macro_rules! dbgwrap {
-//    ($($args:expr),*) => {};
+//    ($($args:expr),*) => { println!($($args),*) }
 //}
+
+macro_rules! dbgwrap {
+    ($($args:expr),*) => {};
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -152,7 +152,6 @@ impl GridSliceState {
             .iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
                 Some(if let Some(map) = state.iter().find(|y| y.0 == *x) {
-                    println!("mapping {}", map.1);
                     map.1
                 } else {
                     // find the first ID in the new domain that
@@ -299,10 +298,6 @@ impl GridSliceRelation {
                 x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
             let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id[x_pos + 1];
 
-            println!(
-                "{} -> {} at {}\tcross: {} {} {} {}",
-                x, y, x_pos, cross_left, cross_right, cross_up, cross_down
-            );
             cross_left as u8 + cross_right as u8 + cross_up as u8 + cross_down as u8 != 1
         })
     }
@@ -358,7 +353,12 @@ impl GridSliceRelation {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 _coef: 1,
-                _base: (0, 0),
+                _base: if x.id_to_len == vec![0, 0, 3] { // note i need to generalize this obviously
+                    println!("{} -> {}", x, y);
+                    (0, 1)
+                } else {
+                    (0, 0)
+                },
             })
         }
     }
@@ -623,9 +623,9 @@ mod tests {
                     [
                         ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", 1, (0, 0)),
                         ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", 1, (0, 0)),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
-                        ("| 3    3    3 |", "| 2    2 || 1 |", 1, (0, 0)),
-                        ("| 3    3    3 |", "| 3    3    3 |", 1, (0, 0)),
+                        ("| 3    3    3 |", "| 1 || 1 || 1 |", 1, (0, 1)),
+                        ("| 3    3    3 |", "| 2    2 || 1 |", 1, (0, 1)),
+                        ("| 3    3    3 |", "| 3    3    3 |", 1, (0, 1)),
                         ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", 1, (0, 0)),
                         ("| 1 || 3 || 2 |", "| 3    3 || 3 |", 1, (0, 0)),
                         ("| 3    3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
@@ -636,7 +636,12 @@ mod tests {
                         ("| 3 || 3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
                     ]
                     .iter()
-                    .map(|x| GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap())
+                    .map(|x| {
+                        let ret = GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap();
+                        assert![ret._coef == x.2];
+                        assert![ret._base == x.3];
+                        ret
+                    })
                     .collect::<Vec<_>>()
                 }
 
