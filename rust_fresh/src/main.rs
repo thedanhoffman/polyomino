@@ -306,58 +306,59 @@ struct GridSliceRelation {
 }
 
 impl GridSliceRelation {
+    fn pass_no_int_bord(x: &GridSliceState, y: &GridSliceState) -> bool {
+        // note this, again, is specific to the 3x3 case but can be generalized through some
+        // recursive function. i don't like doing this but its probably best to have a correct
+        // baseline to work from
+
+        // an interior border can only exist if there is one edge for a given four-way
+        // intersection. we iterate through all x_pos and check whether the upper-right
+        // intersection has more than one edge. we have an edge case to count eges of the square as
+        // borders for obvious reasons
+        x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
+            let cross_left = x.id_to_len[*x_id as usize] == 3;
+            let cross_right = x_pos == x.pos_to_id.len() - 1 || x.id_to_len[x.pos_to_id[x_pos + 1] as usize] == 3;
+            let cross_up = x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
+            let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id[x_pos + 1];
+
+            println!("{} -> {} at {}\tcross: {} {} {} {}", x, y, x_pos, cross_left, cross_right, cross_up, cross_down);
+            cross_left as u8 + cross_right as u8 + cross_up as u8 + cross_down as u8 != 1
+        })
+    }
+
+    fn pass_inc_vol(x: &GridSliceState, y: &GridSliceState) -> bool {
+        // the volume of a piece must increase by the number of times it occurs in the next slice.
+        // we know a piece occurs in the next slice if the length is less than three and we map the
+        // x piece id to the y piece id because the ids are only unique within a slice)
+
+        x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
+            let y_id = y.pos_to_id[x_pos];
+            let y_pos_vol = y.pos_to_id.iter().filter(|y_id_cur| **y_id_cur == y_id).count() as u8;
+           
+            // case (h) in the paper requires a position volume of the y piece onto tye y and x
+            // (the y piece wraps around to a piece on the x slice which is not our current, and we
+            // need to consider that when verifying the marginal increase in volume is the
+            // difference in positional area)
+            let y_x_pos_vol = y_pos_vol + x.pos_to_id.iter().enumerate().filter(|(x_pos_cur, x_id_cur)| {
+                // if the dirct upper id is equal to the current y id
+                x.id_to_len[**x_id_cur as usize] != 3 && y.pos_to_id[*x_pos_cur] == y_id
+            }).count() as u8;
+
+            x.id_to_len[*x_id as usize] == 3 && y_x_pos_vol == y.id_to_len[y.pos_to_id[x_pos] as usize] || {
+                y.id_to_len[y_id as usize] == y_pos_vol + x.id_to_len[*x_id as usize]
+            }
+        })
+    }
+
     fn new(_len: GridLen, x: &GridSliceState, y: &GridSliceState) -> Result<Self, ()> {
-        if {
-            // boundaries cannot be interior (i.e. it must be a polygon), so
-            // we verify that two distinct neighboring pieces cannot merge
-            !x.pos_to_id
-                .iter()
-                .zip(y.pos_to_id.iter())
-                .enumerate()
-                .all(|(pos, (x_id, y_id))| {
-                    let x_distinct_left = pos == 0 || x.pos_to_id[pos - 1] == *x_id;
-                    let _x_distinct_right =
-                        pos == x.pos_to_id.len() - 1 || x.pos_to_id[pos + 1] == *x_id;
-                    let x_distinct_top =
-                        x.id_to_len[*x_id as usize] == 3 && y.id_to_len[*y_id as usize] == 1;
-
-                    let x_distinct_top_left = pos == 0
-                        || x.id_to_len[x.pos_to_id[pos - 1] as usize] == 3
-                            && y.id_to_len[y.pos_to_id[pos - 1] as usize] == 1;
-
-                    let _x_distinct_top_right = pos == x.pos_to_id.len() - 1
-                        || x.id_to_len[x.pos_to_id[pos + 1] as usize] == 3
-                            && y.id_to_len[y.pos_to_id[pos + 1] as usize] == 1;
-
-                    let y_distinct_left = pos == 0 || y.pos_to_id[pos - 1] == *y_id;
-                    let _y_distinct_right =
-                        pos == y.pos_to_id.len() - 1 || y.pos_to_id[pos + 1] == *y_id;
-
-                    // no interior borders (i.e. no splits and no merges)
-                    let no_int_bord = x_distinct_left as u8
-                        + x_distinct_top as u8
-                        + x_distinct_top_left as u8
-                        + y_distinct_left as u8
-                        != 1;
-
-                    let y_id_vol = y.id_to_len[*y_id as usize] as i16;
-                    let y_id_pos_vol =
-                        y.pos_to_id.iter().filter(|y_id_| *y_id_ == y_id).count() as i16;
-                    let x_id_vol = x.id_to_len[*x_id as usize] as i16;
-
-                    let exact_inc = x_distinct_top || y_id_vol - y_id_pos_vol == x_id_vol;
-
-                    no_int_bord && exact_inc
-                })
-        } {
-            dbgwrap!("slice relation failed the interior border test");
+        let checks = [("no int bord", Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState) -> bool), ("inc vol", Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState) -> bool)];
+        if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y)) {
+            dbgwrap!("test {} failed for {} -> {}", fail.0, x, y);
             Err(())
         } else {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
-                // note: i think we only need to consider one symmetry, because any action on the
-                // other simultaneously will double-count the horizontal symmetry
-                _coef: if x.has_unique_flip() { 2 } else { 1 },
+                _coef: 1,
                 _base: (0, 0),
             })
         }
@@ -634,8 +635,8 @@ mod tests {
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
-                            "{}:\n{}\n{} with coef {} and base ({}, {})",
-                            i, x._func.1, x._func.0, x._coef, x._base.0, x._base.1
+                            "{}: {} -> {} with coef {} and base ({}, {})",
+                            i, x._func.0, x._func.1, x._coef, x._base.0, x._base.1
                         );
                     });
 
