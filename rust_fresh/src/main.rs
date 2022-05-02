@@ -209,13 +209,6 @@ impl GridSliceState {
             .all(|x| x)
     }
 
-    fn pass_not_isomorphic_symmetric(
-        _cur_id_to_len_byte: &Vec<GridLen>,
-        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
-        true
-    }
-
     fn new(
         _len: GridLen,
         cur_id_to_len_byte: &Vec<GridLen>,
@@ -259,11 +252,6 @@ impl GridSliceState {
                 "not disjoint",
                 Self::pass_not_disjoint as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
             ),
-            (
-                "not isomorphic symmetric",
-                Self::pass_not_isomorphic_symmetric
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
-            ),
         ];
 
         if let Some(fail) = checks
@@ -298,7 +286,7 @@ impl GridSliceState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
     pub _coef: u64,
@@ -543,20 +531,6 @@ mod tests {
 
             mod slice_state {
                 use super::*;
-                #[test]
-                fn test_trominoes_unit_slice_state_not_isomorphic_symmetric() {
-                    assert_eq![
-                        GridSliceState::pass_not_isomorphic_symmetric(
-                            &vec![0, 1, 2],
-                            &vec![1, 1, 2]
-                        ) as usize
-                            + GridSliceState::pass_not_isomorphic_symmetric(
-                                &vec![0, 1, 2],
-                                &vec![1, 2, 2]
-                            ) as usize,
-                        1
-                    ];
-                }
 
                 #[test]
                 fn test_trominoes_unit_slice_state_not_isomorphic() {
@@ -629,9 +603,38 @@ mod tests {
             mod slice_relation {
                 use super::*;
 
+                fn get_reference() -> Vec<GridSliceRelation> {
+                    let slice_state = Grid::new_slice_state(3);
+                    let find = |a: &'static str| -> &GridSliceState {
+                        slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
+                    };
+
+                    [
+                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", 1, (0, 0)),
+                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", 1, (0, 0)),
+                        ("| 3    3    3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
+                        ("| 3    3    3 |", "| 2    2 || 1 |", 1, (0, 0)),
+                        ("| 3    3    3 |", "| 3    3    3 |", 1, (0, 0)),
+                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", 1, (0, 0)),
+                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |", 1, (0, 0)),
+                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
+                        ("| 3    3 || 3 |", "| 2    2 || 1 |", 1, (0, 0)),
+                        ("| 3    3 || 3 |", "| 3    3    3 |", 1, (0, 0)),
+                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", 1, (0, 0)),
+                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |", 1, (0, 0)),
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |", 1, (0, 0))
+                    ].iter().map(|x| GridSliceRelation::new(3, find(x.0), find(x.1)).unwrap()).collect::<Vec<_>>()
+                }
+
+                #[test]
+                fn test_trominoes_general_slice_relation_reference() {
+                    get_reference();
+                }
+
                 #[test]
                 fn test_trominoes_general_slice_relation() {
                     let grid = Grid::new(3);
+                    let answers = get_reference();
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
@@ -640,7 +643,17 @@ mod tests {
                         );
                     });
 
-                    assert![false];
+                    answers.iter().for_each(|x| {
+                        if !grid.slice_relation.iter().any(|y| x == y) {
+                            panic!("cannot find {:?} {} in slice_relation", x, x);
+                        }
+                    });
+
+                    grid.slice_relation.iter().for_each(|x| {
+                        if !answers.iter().any(|y| x == y) {
+                            panic!("cannot find {:?} {} in answers", x, x)
+                        }
+                    });
                 }
             }
         }
