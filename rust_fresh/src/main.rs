@@ -595,7 +595,7 @@ impl Grid {
         solve_iter_half(slice_state.clone());
         if !GridSliceState::non_canonical_equal(
             &slice_state,
-            &GridSliceState::reverse(slice_state.clone())
+            &GridSliceState::reverse(slice_state.clone()),
         ) {
             solve_iter_half(GridSliceState::reverse(slice_state));
         }
