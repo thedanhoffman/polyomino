@@ -4,13 +4,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
-
 //macro_rules! dbgwrap {
-//    ($($args:expr),*) => {};
+//    ($($args:expr),*) => { println!($($args),*) }
 //}
+
+macro_rules! dbgwrap {
+    ($($args:expr),*) => {};
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -566,39 +566,47 @@ impl Grid {
         // either passing means we should traverse down
 
         let mut solve_iter_half = |slice_state_cur: GridSliceState| {
-            stack.push(slice_state_cur.clone());
+            println!("STACK");
+            stack.iter().for_each(|x| println!("{}", x));
+            println!("");
 
             if stack.len() as u8 == self._len + 2 {
                 if slice_state_cur == self.solve_base() {
                     tiling.push(stack.clone());
                 }
             } else {
-                self.slice_relation.iter().enumerate().for_each(|x| {
-                    if GridSliceState::non_canonical_equal(&x.1._func.1, &slice_state_cur) {
-                        self.solve_iter(x.1._func.0.clone(), stack, tiling);
-                    } else if GridSliceState::non_canonical_equal(
-                        &GridSliceState::reverse(x.1._func.1.clone()),
-                        &slice_state_cur,
-                    ) {
-                        self.solve_iter(
-                            GridSliceState::reverse(x.1._func.0.clone()),
-                            stack,
-                            tiling,
-                        );
+                self.slice_relation.iter().for_each(|x| {
+                    let mut solve_iter_inner_half = |slice_relation_cur: GridSliceRelation| {
+                        stack.push(slice_relation_cur._func.1.clone());
+                        if GridSliceState::non_canonical_equal(&slice_relation_cur._func.1, &slice_state_cur) {
+                            println!("{} is non-canonically equal to {}", &slice_relation_cur._func.1, slice_state_cur);
+                            self.solve_iter(slice_relation_cur._func.0.clone(), stack, tiling);
+                        } else {
+                            println!("{} is not non-canonically equal to {}", &slice_relation_cur._func.1, slice_state_cur);
+                        }
+                        stack.truncate(stack.len() - 1);
+                    };
+
+                    solve_iter_inner_half(x.clone());
+                    let x_uniq = x._func.0.has_non_canonical_unique_flip();  
+                    let y_uniq = x._func.1.has_non_canonical_unique_flip(); 
+                    
+                    if y_uniq {
+                        println!("{} has a non-canonical unique flip", &x._func.1);
+
+                         solve_iter_inner_half(GridSliceRelation {
+                            _func: (
+                                GridSliceState::reverse(x._func.0.clone()),
+                                GridSliceState::reverse(x._func.1.clone()),
+                            ),
+                            _piece_map: x._piece_map.clone(),
+                        });
                     }
                 });
             };
-
-            stack.truncate(stack.len() - 1);
         };
 
         solve_iter_half(slice_state.clone());
-        if !GridSliceState::non_canonical_equal(
-            &slice_state,
-            &GridSliceState::reverse(slice_state.clone()),
-        ) {
-            solve_iter_half(GridSliceState::reverse(slice_state));
-        }
     }
 
     fn solve(&self) -> usize {
@@ -629,23 +637,6 @@ fn main() {
         "s" => {
             let grid = Grid::new(3);
             println!("grid.solve(): {}", grid.solve())
-        }
-        "test" => {
-            // define only the pieces required to generate the tiling
-            let state_a = GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap();
-            let state_b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).unwrap();
-            let state_c = GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap();
-
-            let rel_a = GridSliceRelation::new(3, &state_a, &state_b, &vec![3, 3, 3]).unwrap();
-            let rel_b = GridSliceRelation::new(3, &state_b, &state_c, todo!()).unwrap();
-
-            let grid = Grid {
-                _len: 3,
-                slice_state: vec![state_a.clone(), state_b.clone(), state_c.clone()],
-                slice_relation: vec![rel_a.clone(), rel_b.clone()],
-            };
-
-            grid.solve();
         }
         _ => unreachable!(),
     }
@@ -871,6 +862,8 @@ mod tests {
                 fn test_trominoes_general_solve() {
                     let grid = Grid::new(3);
                     assert_eq![grid.solve(), 10];
+
+                    assert![false];
                 }
             }
         }
