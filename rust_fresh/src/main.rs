@@ -276,8 +276,24 @@ impl GridSliceState {
         a
     }
 
-    fn has_non_canonical_unique_flip(&self) -> bool {
-        format!["{}", Self::reverse(self.clone())] != format!["{}", self]
+    fn symmetric(&self) -> bool {
+        Self::non_canonical_equal(&Self::reverse(self.clone()), &self)
+    }
+
+    fn pos_to_id(&self, flip: bool, pos: usize) -> u8 {
+        if !flip {
+            self.pos_to_id[pos as usize]
+        } else {
+            self.pos_to_id[self.pos_to_id.len() - pos as usize - 1]
+        }
+    }
+
+    fn pos_to_id_iter<'a>(&'a self, flip: bool) -> Box<dyn Iterator<Item=&'a u8> + 'a> {
+        if !flip {
+            Box::new(self.pos_to_id.iter())
+        } else {
+            Box::new(self.pos_to_id.iter().rev())
+        }
     }
 }
 
@@ -285,6 +301,7 @@ impl GridSliceState {
 struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
     pub _piece_map: Vec<u8>,
+    pub flip: bool
 }
 
 impl GridSliceRelation {
@@ -292,7 +309,7 @@ impl GridSliceRelation {
     // condition for an upper border (look at the case of (l) in the paper), so we need to be
     // smarter about how we define borders between pieces
 
-    fn pass_no_int_bord(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+    fn pass_no_int_bord(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>, flip: bool) -> bool {
         // note this, again, is specific to the 3x3 case but can be generalized through some
         // recursive function. i don't like doing this but its probably best to have a correct
         // baseline to work from
@@ -301,19 +318,21 @@ impl GridSliceRelation {
         // intersection. we iterate through all x_pos and check whether the upper-right
         // intersection has more than one edge. we have an edge case to count eges of the square as
         // borders for obvious reasons
-        x.pos_to_id.iter().enumerate().all(|(x_pos, x_id)| {
-            let cross_left = piece_map[x.pos_to_id[x_pos] as usize] != y.pos_to_id[x_pos];
+        x.pos_to_id_iter(flip).enumerate().all(|(x_pos, x_id)| {
+            let y_id = y.pos_to_id(false, x_pos);
+
+            let cross_left = piece_map[*x_id as usize] != y_id;
             let cross_right = x_pos == x.pos_to_id.len() - 1
-                || piece_map[x.pos_to_id[x_pos + 1] as usize] != y.pos_to_id[x_pos + 1];
+                || piece_map[x.pos_to_id(flip, x_pos + 1) as usize] != y.pos_to_id(false, x_pos + 1);
             let cross_up =
-                x_pos == x.pos_to_id.len() - 1 || y.pos_to_id[x_pos] != y.pos_to_id[x_pos + 1];
-            let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id[x_pos + 1];
+                x_pos == x.pos_to_id.len() - 1 || y_id != y.pos_to_id(false, x_pos + 1);
+            let cross_down = x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id(flip, x_pos + 1);
 
             cross_left as u8 + cross_right as u8 + cross_up as u8 + cross_down as u8 != 1
         })
     }
 
-    fn pass_inc_vol(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+    fn pass_inc_vol(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>, flip: bool) -> bool {
         // the volume of a piece must increase by the number of times it occurs in the next slice.
         // we know a piece occurs in the next slice if the length is less than three and we map the
         // x piece id to the y piece id because the ids are only unique within a slice)
@@ -356,7 +375,7 @@ impl GridSliceRelation {
         })
     }
 
-    fn pass_map_valid_domain(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+    fn pass_map_valid_domain(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>, flip: bool) -> bool {
         assert![piece_map.len() == 3];
 
         x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == 3 { piece_map[x_id] == 3 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
@@ -364,7 +383,7 @@ impl GridSliceRelation {
         // if the length of a piece in y is zero, then it does not map
     }
 
-    fn pass_connected(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
+    fn pass_connected(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>, flip: bool) -> bool {
         // verify that each x<->y mapping have a connecting between them
         //
         // note: this might also not generalize beyond the 3 case
@@ -376,8 +395,16 @@ impl GridSliceRelation {
             // either the map doesn't apply or there exists a connection between the ids
             y_id == 3
                 || (0..piece_map.len())
-                    .any(|pos| x.pos_to_id[pos] == x_id && y.pos_to_id[pos] == y_id)
+                    .any(|pos| x.pos_to_id(flip, pos) == x_id && y.pos_to_id[pos] == y_id)
         })
+    }
+
+    fn pass_unique_flip(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>, flip: bool) -> bool {
+        if x.symmetric() || y.symmetric() {
+            !flip
+        } else {
+            true
+        }
     }
 
     fn new(
@@ -385,28 +412,33 @@ impl GridSliceRelation {
         x: &GridSliceState,
         y: &GridSliceState,
         piece_map: &Vec<u8>,
+        flip: bool
     ) -> Result<Self, ()> {
         // note it might be a good idea to make these fn casts into a type alias
         let checks = [
             (
                 "no int bord",
-                Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+                Self::pass_no_int_bord as fn(&GridSliceState, &GridSliceState, &Vec<u8>, bool) -> bool,
             ),
             (
                 "inc vol",
-                Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+                Self::pass_inc_vol as fn(&GridSliceState, &GridSliceState, &Vec<u8>, bool) -> bool,
             ),
             (
                 "map valid domain",
                 Self::pass_map_valid_domain
-                    as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+                    as fn(&GridSliceState, &GridSliceState, &Vec<u8>, bool) -> bool,
             ),
             (
                 "connected",
-                Self::pass_connected as fn(&GridSliceState, &GridSliceState, &Vec<u8>) -> bool,
+                Self::pass_connected as fn(&GridSliceState, &GridSliceState, &Vec<u8>, bool) -> bool,
             ),
+            (
+                "unique flip",
+                Self::pass_unique_flip as fn(&GridSliceState, &GridSliceState, &Vec<u8>, bool) -> bool
+            )
         ];
-        if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map)) {
+        if let Some(fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
             dbgwrap!(
                 "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?}",
                 fail.0,
@@ -421,6 +453,7 @@ impl GridSliceRelation {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 _piece_map: piece_map.clone(),
+                flip
             })
         }
     }
@@ -428,7 +461,11 @@ impl GridSliceRelation {
 
 impl std::fmt::Display for GridSliceRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} -> {}", self._func.0, self._func.1).unwrap();
+        write!(f, "{} -> {}",{
+            let mut x = self._func.0.clone();
+            x.pos_to_id.reverse();
+            format!["{}", x]
+        }, self._func.1).unwrap();
         Ok(())
     }
 }
@@ -512,7 +549,9 @@ impl Grid {
                     (0..4).flat_map(move |first| {
                         (0..4).flat_map(move |second| {
                             (0..4).flat_map(move |third| {
-                                GridSliceRelation::new(len, x, y, &vec![first, second, third])
+                                (0..2).flat_map(move |flip| {
+                                    GridSliceRelation::new(len, x, y, &vec![first, second, third], flip != 0)
+                                })
                             })
                         })
                     })
@@ -550,63 +589,54 @@ impl Grid {
         stack: &mut Vec<GridSliceState>,
         tiling: &mut Vec<Vec<GridSliceState>>,
     ) {
-        // note we don't need to define a base case for the recurrence because it is inherently
-        // periodic
+        stack.push(slice_state.clone());
+        println!("STACK");
+        stack.iter().for_each(|x| println!("{}", x));
+        println!("");
 
-        // note this is a bit wonky. we use | 3    3    3 | as the top of the square and work from
-        // there, but we don't render this since it isn't a real tile (it only has the properties
-        // of the edge of a cube because the tiling is inherently periodic)
+        // note there are duplicate methods that we don't take into account and i'm not sure how
+        // the program actually fixes this...
 
-        // note we actually generate len + 2 tilings but force the top and bottom to be a
-        // horizontal piece (identical behavior to the edge of the square)
+        if stack.len() as u8 == self._len + 2 {
+            if GridSliceState::non_canonical_equal(&slice_state, &self.solve_base()) {
+                println!("PUSHING BACK");
+                tiling.push(stack.clone());
+            }
+        } else {
+            // note we need to traverse on *unique* lower branches, since the domain and range of
+            // each function can repeat (just not repeat as the same pair)
 
-        // note that we create a copy of the slice state passed in. we pass in both the real copy
-        // and a reversed copy ("reverse" is defined as reversing the pos_to_id array). we also
-        // check each relation against the reversed slice_state and the original slice_state.
-        // either passing means we should traverse down
+            let mut traverse_set = std::collections::HashSet::new();
 
-        let mut solve_iter_half = |slice_state_cur: GridSliceState| {
-            println!("STACK");
-            stack.iter().for_each(|x| println!("{}", x));
-            println!("");
+            self.slice_relation
+                .iter()
+                .map(|x| x.clone())
+                .chain(self.slice_relation.iter().map(|x| GridSliceRelation {
+                    _func: (
+                        GridSliceState::reverse(x._func.0.clone()),
+                        GridSliceState::reverse(x._func.1.clone()),
+                    ),
+                    _piece_map: x._piece_map.clone(),
+                    flip: x.flip
+                }))
+                .for_each(|x| {
+                    // if we match the standard orientation, recurse on it
+                    // if the current slice_state is symmetric, only recurse once
+                    let child_str = format!["{}", &x._func.0];
 
-            if stack.len() as u8 == self._len + 2 {
-                if slice_state_cur == self.solve_base() {
-                    tiling.push(stack.clone());
-                }
-            } else {
-                self.slice_relation.iter().for_each(|x| {
-                    let mut solve_iter_inner_half = |slice_relation_cur: GridSliceRelation| {
-                        stack.push(slice_relation_cur._func.1.clone());
-                        if GridSliceState::non_canonical_equal(&slice_relation_cur._func.1, &slice_state_cur) {
-                            println!("{} is non-canonically equal to {}", &slice_relation_cur._func.1, slice_state_cur);
-                            self.solve_iter(slice_relation_cur._func.0.clone(), stack, tiling);
-                        } else {
-                            println!("{} is not non-canonically equal to {}", &slice_relation_cur._func.1, slice_state_cur);
+                    if !traverse_set.contains(&child_str) {
+                        if GridSliceState::non_canonical_equal(&x._func.1, &slice_state) {
+                            if x.flip {
+                                self.solve_iter(GridSliceState::reverse(x._func.0.clone()), stack, tiling);
+                            } else {
+                                self.solve_iter(x._func.0.clone(), stack, tiling);
+                            }
+                            traverse_set.insert(child_str);
                         }
-                        stack.truncate(stack.len() - 1);
-                    };
-
-                    solve_iter_inner_half(x.clone());
-                    let x_uniq = x._func.0.has_non_canonical_unique_flip();  
-                    let y_uniq = x._func.1.has_non_canonical_unique_flip(); 
-                    
-                    if y_uniq {
-                        println!("{} has a non-canonical unique flip", &x._func.1);
-
-                         solve_iter_inner_half(GridSliceRelation {
-                            _func: (
-                                GridSliceState::reverse(x._func.0.clone()),
-                                GridSliceState::reverse(x._func.1.clone()),
-                            ),
-                            _piece_map: x._piece_map.clone(),
-                        });
                     }
                 });
-            };
-        };
-
-        solve_iter_half(slice_state.clone());
+        }
+        stack.truncate(stack.len() - 1);
     }
 
     fn solve(&self) -> usize {
@@ -637,6 +667,26 @@ fn main() {
         "s" => {
             let grid = Grid::new(3);
             println!("grid.solve(): {}", grid.solve())
+        }
+        "test" => {
+            let x = GridSliceState::new(
+                    3,
+                    &vec![0, 3, 3],
+                    &vec![1, 1, 2]
+                ).unwrap();
+            let y = GridSliceState::new(
+                    3,
+                    &vec![0, 1, 2],
+                    &vec![2, 2, 1]
+                ).unwrap();
+
+            GridSliceRelation::new(
+                3,
+                &x,
+                &y,
+                &vec![0, 1, 3],
+                true
+            ).unwrap();
         }
         _ => unreachable!(),
     }
@@ -749,6 +799,14 @@ mod tests {
             mod slice_state {
                 use super::*;
 
+                #[test]
+                fn test_trominoes_general_slice_state_basic() {
+                    let a = GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap();
+                    println!("{}", &a);
+                    
+                    assert![a.symmetric()];
+                }
+
                 fn get_reference() -> Vec<GridSliceState> {
                     vec![
                         GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A
@@ -803,24 +861,32 @@ mod tests {
                     };
 
                     [
-                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", vec![0, 1, 2]),
-                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", vec![0, 1, 2]),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3]),
-                        ("| 3    3    3 |", "| 2    2 || 1 |", vec![3, 3, 3]),
-                        ("| 3    3    3 |", "| 3    3    3 |", vec![3, 3, 3]),
-                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", vec![1, 2, 3]),
-                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |", vec![1, 2, 3]),
-                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3]),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3]),
-                        ("| 3    3 || 3 |", "| 3    3    3 |", vec![3, 3, 3]),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3]),
-                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3]),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", vec![3, 3, 3]),
-                        ("| 2    2 || 1 |", "| 1 || 3 || 2 |", vec![3, 1, 2]),
+                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", vec![0, 1, 2], false),
+                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", vec![0, 1, 2], false),
+                        ("| 3    3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
+                        ("| 3    3    3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
+                        ("| 3    3    3 |", "| 3    3    3 |", vec![3, 3, 3], false),
+                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", vec![1, 2, 3], false),
+                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |", vec![1, 2, 3], false),
+                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
+                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
+                        ("| 3    3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
+                        ("| 2    2 || 1 |", "| 1 || 3 || 2 |", vec![3, 1, 2], false),
+                        // new
+                        ("| 2    2 || 1 |", "| 2 || 1 || 3 |", vec![3, 1, 2], true),
+                        ("| 2    2 || 1 |", "| 3    3 || 3 |", vec![3, 1, 2], true),
+                        ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", vec![1, 2, 3], true),
+                        ("| 2 || 1 || 3 |", "| 3    3 || 3 |", vec![1, 2, 3], true),
+                        ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", vec![1, 2, 3], true),
+                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], true)
+                            //("| 2    2 || 1 |", "| 2 || 1 || 3 |", vec![3, 1, 2], true)
                     ]
                     .iter()
                     .map(|x| {
-                        let ret = GridSliceRelation::new(3, find(x.0), find(x.1), &x.2).unwrap();
+                        let ret = GridSliceRelation::new(3, find(x.0), find(x.1), &x.2, x.3).unwrap();
                         ret
                     })
                     .collect::<Vec<_>>()
@@ -862,8 +928,6 @@ mod tests {
                 fn test_trominoes_general_solve() {
                     let grid = Grid::new(3);
                     assert_eq![grid.solve(), 10];
-
-                    assert![false];
                 }
             }
         }
