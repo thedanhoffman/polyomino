@@ -426,6 +426,9 @@ impl GridSliceRelation {
         _piece_map: &Vec<u8>,
         flip: bool,
     ) -> bool {
+        // we want to have a second parity possible for everything possible ("flip" is whether we
+        // flip the first. since the slice relation checks for a flip of *both* at the time we
+        // check, we force the flip to be one value if it wouldn't change)
         if x.symmetric() || y.symmetric() {
             !flip
         } else {
@@ -912,7 +915,7 @@ mod tests {
                         ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", vec![1, 2, 3], true),
                         ("| 2 || 1 || 3 |", "| 3    3 || 3 |", vec![1, 2, 3], true),
                         ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", vec![1, 2, 3], true),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], true), //("| 2    2 || 1 |", "| 2 || 1 || 3 |", vec![3, 1, 2], true)
+                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], true),
                     ]
                     .iter()
                     .map(|x| {
