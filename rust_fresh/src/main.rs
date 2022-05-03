@@ -821,17 +821,15 @@ mod tests {
                     });
                 }
             }
-            /*
-                        mod solve {
-                            use super::*;
+            mod solve {
+                use super::*;
 
-                            #[test]
-                            fn test_trominoes_general_solve() {
-                                let grid = Grid::new(3);
-                                assert_eq![grid.solve(), 10];
-                            }
-                        }
-            */
+                #[test]
+                fn test_trominoes_general_solve() {
+                    let grid = Grid::new(3);
+                    assert_eq![grid.solve(), 10];
+                }
+            }
         }
     }
 }
