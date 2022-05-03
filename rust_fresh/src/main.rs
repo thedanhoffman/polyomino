@@ -4,13 +4,13 @@ type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
 macro_rules! dbgwrap {
-    ($($args:expr),*) => {};
+    ($($args:expr),*) => { println!($($args),*) }
 }
+
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => {};
+//}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct GridSliceState {
@@ -281,7 +281,7 @@ impl GridSliceState {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct GridSliceRelation {
     pub _func: (GridSliceState, GridSliceState),
     pub _piece_map: Vec<u8>,
@@ -366,6 +366,7 @@ impl GridSliceRelation {
 
     fn pass_connected(x: &GridSliceState, y: &GridSliceState, piece_map: &Vec<u8>) -> bool {
         // verify that each x<->y mapping have a connecting between them
+        //
         // note: this might also not generalize beyond the 3 case
 
         piece_map.iter().enumerate().all(|a| {
@@ -559,27 +560,45 @@ impl Grid {
         // note we actually generate len + 2 tilings but force the top and bottom to be a
         // horizontal piece (identical behavior to the edge of the square)
 
-        stack.push(slice_state.clone());
+        // note that we create a copy of the slice state passed in. we pass in both the real copy
+        // and a reversed copy ("reverse" is defined as reversing the pos_to_id array). we also
+        // check each relation against the reversed slice_state and the original slice_state.
+        // either passing means we should traverse down
 
-        if stack.len() as u8 == self._len + 2 {
-            if slice_state == self.solve_base() {
-                tiling.push(stack.clone());
-            }
-        } else {
-            self.slice_relation.iter().enumerate().for_each(|x| {
-                if GridSliceState::non_canonical_equal(&x.1._func.1, &slice_state) {
-                    self.solve_iter(x.1._func.0.clone(), stack, tiling);
-                } else if GridSliceState::non_canonical_equal(
-                    &GridSliceState::reverse(x.1._func.1.clone()),
-                    &slice_state,
-                ) {
-                    todo!();
-                    self.solve_iter(GridSliceState::reverse(x.1._func.0.clone()), stack, tiling);
+        let mut solve_iter_half = |slice_state_cur: GridSliceState| {
+            stack.push(slice_state_cur.clone());
+
+            if stack.len() as u8 == self._len + 2 {
+                if slice_state_cur == self.solve_base() {
+                    tiling.push(stack.clone());
                 }
-            });
+            } else {
+                self.slice_relation.iter().enumerate().for_each(|x| {
+                    if GridSliceState::non_canonical_equal(&x.1._func.1, &slice_state_cur) {
+                        self.solve_iter(x.1._func.0.clone(), stack, tiling);
+                    } else if GridSliceState::non_canonical_equal(
+                        &GridSliceState::reverse(x.1._func.1.clone()),
+                        &slice_state_cur,
+                    ) {
+                        self.solve_iter(
+                            GridSliceState::reverse(x.1._func.0.clone()),
+                            stack,
+                            tiling,
+                        );
+                    }
+                });
+            };
+
+            stack.truncate(stack.len() - 1);
         };
 
-        stack.truncate(stack.len() - 1);
+        solve_iter_half(slice_state.clone());
+        if !GridSliceState::non_canonical_equal(
+            &slice_state,
+            &GridSliceState::reverse(slice_state.clone())
+        ) {
+            solve_iter_half(GridSliceState::reverse(slice_state));
+        }
     }
 
     fn solve(&self) -> usize {
@@ -587,10 +606,10 @@ impl Grid {
         let mut tiling = Vec::new();
         self.solve_iter(self.solve_base(), &mut stack, &mut tiling);
 
-        println!("tilings");
-        tiling.iter().for_each(|x| {
-            x.iter().for_each(|y| println!("{}", y));
-            println!("");
+        println!("tilings (length = {})", tiling.len());
+        tiling.iter().enumerate().for_each(|x| {
+            println!("TILING {}", x.0);
+            x.1.iter().for_each(|y| println!("{:?}\t{}", y, y));
         });
 
         tiling.len()
@@ -598,12 +617,36 @@ impl Grid {
 }
 
 fn main() {
-    let grid = Grid::new(3);
-
     match std::env::args().nth(1).unwrap().as_str() {
-        "ss" => grid.slice_state.iter().for_each(|x| println!("{}", x)),
-        "sr" => grid.slice_relation.iter().for_each(|x| println!("{}", x)),
-        "s" => println!("grid.solve(): {}", grid.solve()),
+        "ss" => {
+            let grid = Grid::new(3);
+            grid.slice_state.iter().for_each(|x| println!("{}", x))
+        }
+        "sr" => {
+            let grid = Grid::new(3);
+            grid.slice_relation.iter().for_each(|x| println!("{}", x))
+        }
+        "s" => {
+            let grid = Grid::new(3);
+            println!("grid.solve(): {}", grid.solve())
+        }
+        "test" => {
+            // define only the pieces required to generate the tiling
+            let state_a = GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap();
+            let state_b = GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).unwrap();
+            let state_c = GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap();
+
+            let rel_a = GridSliceRelation::new(3, &state_a, &state_b, &vec![3, 3, 3]).unwrap();
+            let rel_b = GridSliceRelation::new(3, &state_b, &state_c, todo!()).unwrap();
+
+            let grid = Grid {
+                _len: 3,
+                slice_state: vec![state_a.clone(), state_b.clone(), state_c.clone()],
+                slice_relation: vec![rel_a.clone(), rel_b.clone()],
+            };
+
+            grid.solve();
+        }
         _ => unreachable!(),
     }
 }
