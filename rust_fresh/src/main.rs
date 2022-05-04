@@ -3,13 +3,54 @@ type GridLen = u8;
 type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
+macro_rules! dbgwrap {
+    ($($args:expr),*) => { println!($($args),*) }
+}
 
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
+/*
 macro_rules! dbgwrap {
     ($($args:expr),*) => {};
+}
+*/
+// helper stuff
+struct AddWithCarry {
+    pub min: u8,
+    pub max: u8,
+    pub len: usize,
+    pub val: Vec<u8>
+}
+
+impl AddWithCarry {
+    fn new(min: u8, max: u8, len: usize) -> Self {
+        Self {
+            min, max, len,
+            val: vec![min; len]
+        }
+    }
+}
+
+impl Iterator for AddWithCarry {
+    type Item = AddWithCarry;
+
+    fn next(&mut self) -> Option<AddWithCarry> {
+        let mut pos = 0;
+        while pos < self.val.len() && self.val[pos] == self.max {
+            self.val[pos] = self.min;
+            pos += 1;
+        }
+
+        if pos < self.val.len() as usize {
+            self.val[pos] += 1;
+            Some(AddWithCarry {
+                min: self.min,
+                max: self.max,
+                len: self.len,
+                val: self.val.clone()
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
@@ -67,7 +108,7 @@ impl GridSliceState {
             .iter()
             .map(|x| *x as usize)
             .sum::<usize>()
-            % 3
+            % cur_id_to_len_byte.len()
             == 0
     }
 
@@ -253,7 +294,7 @@ impl GridSliceState {
         {
             dbgwrap!(
                 "test {} failed for id_to_len: {:?}, pos_to_id: {:?}",
-                fail.0,
+                _fail.0,
                 cur_id_to_len_byte,
                 cur_pos_to_id_byte
             );
@@ -352,7 +393,7 @@ impl GridSliceRelation {
             let x_id = a.0 as u8;
             let y_id = *a.1;
 
-            if y_id != 3 {
+            if y_id != y.id_to_len.len() as u8 {
                 let y_pos_vol = y
                     .pos_to_id
                     .iter()
@@ -364,7 +405,7 @@ impl GridSliceRelation {
                 x.id_to_len[x_id as usize] + y_pos_vol == y.id_to_len[y_id as usize]
             } else {
                 // either the piece id is unused or it is full
-                x.id_to_len[x_id as usize] == 3 || x.id_to_len[x_id as usize] == 0
+                x.id_to_len[x_id as usize] == x.id_to_len.len() as u8 || x.id_to_len[x_id as usize] == 0
             }
         }) && y.id_to_len.iter().enumerate().all(|a| {
             let y_id = a.0 as u8;
@@ -392,9 +433,7 @@ impl GridSliceRelation {
         piece_map: &Vec<u8>,
         _flip: bool,
     ) -> bool {
-        assert![piece_map.len() == 3];
-
-        x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == 3 { piece_map[x_id] == 3 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
+        x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == x.id_to_len.len() as u8 { piece_map[x_id] == x.id_to_len.len() as u8 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
                     && y.id_to_len.iter().enumerate().all(|(y_id, y_len)| if *y_len == 0 { piece_map.iter().filter(|y_id_cur| **y_id_cur == y_id as u8).count() == 0 } else { true })
         // if the length of a piece in y is zero, then it does not map
     }
@@ -414,7 +453,7 @@ impl GridSliceRelation {
             let y_id = *a.1;
 
             // either the map doesn't apply or there exists a connection between the ids
-            y_id == 3
+            y_id == piece_map.len() as u8
                 || (0..piece_map.len())
                     .any(|pos| x.pos_to_id(flip, pos) == x_id && y.pos_to_id[pos] == y_id)
         })
@@ -473,7 +512,7 @@ impl GridSliceRelation {
         if let Some(_fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
             dbgwrap!(
                 "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?}",
-                fail.0,
+                _fail.0,
                 x,
                 y,
                 x,
@@ -577,26 +616,20 @@ impl Grid {
         len: GridLen,
         slice_state: &Vec<GridSliceState>,
     ) -> Vec<GridSliceRelation> {
-        assert![len == 3];
-
         slice_state
             .iter()
             .flat_map(move |x| {
                 slice_state.iter().flat_map(move |y| {
                     // note i should do all add_with_carry uses like this
-                    (0..4).flat_map(move |first| {
-                        (0..4).flat_map(move |second| {
-                            (0..4).flat_map(move |third| {
-                                (0..2).flat_map(move |flip| {
-                                    GridSliceRelation::new(
+                    AddWithCarry::new(0, len, len as usize).flat_map(move |piece_map| {
+                        (0..2).flat_map(move |flip| {
+                                     GridSliceRelation::new(
                                         len,
                                         x,
                                         y,
-                                        &vec![first, second, third],
+                                        &piece_map.val,
                                         flip != 0,
                                     )
-                                })
-                            })
                         })
                     })
                 })
@@ -624,7 +657,11 @@ impl Grid {
     }
 
     fn solve_base(&self) -> GridSliceState {
-        self.find_slice_by_render("| 3    3    3 |")
+        self.slice_state
+            .iter()
+            .find(|x| x.id_to_len.iter().filter(|x| **x == 0).count() == x.id_to_len.len() - 1)
+            .unwrap()
+            .clone()
     }
 
     fn solve_iter(
@@ -667,6 +704,8 @@ impl Grid {
                     // if we match the standard orientation, recurse on it
                     // if the current slice_state is symmetric, only recurse once
                     let child_str = format!["{}", &x._func.0];
+
+                    println!("child_str: {}", &child_str);
 
                     if !traverse_set.contains(&child_str) {
                         if GridSliceState::non_canonical_equal(&x._func.1, &slice_state) {
@@ -730,6 +769,38 @@ fn main() {
 mod tests {
     use super::*;
     use itertools::Itertools;
+
+    mod tetrominoes {
+        use super::*;
+
+        #[test]
+        fn tests_tetrominoes_basic() {
+            GridSliceRelation::new(
+                4,
+                &GridSliceState::new(
+                    4,
+                    &vec![4, 4, 4, 4],
+                    &vec![0, 1, 2, 3]
+                ).unwrap(),
+                 &GridSliceState::new(
+                    4, 
+                    &vec![0, 0, 0, 4],
+                    &vec![3, 3, 3, 3]
+                ).unwrap(),
+                &vec![4, 4, 4, 4],
+                false
+            ).unwrap();
+        }
+
+        #[test]
+        fn tests_tetrominoes_slice_state() {
+            let grid = Grid::new(4);
+            grid.slice_state.iter().enumerate().for_each(|(i, x)| println!("{}: {}", i, x));
+            grid.solve();
+            
+            assert![false];
+        }
+    }
 
     mod trominoes {
         use super::*;
