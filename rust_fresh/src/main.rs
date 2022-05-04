@@ -3,28 +3,29 @@ type GridLen = u8;
 type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
-macro_rules! dbgwrap {
-    ($($args:expr),*) => { println!($($args),*) }
-}
+//macro_rules! dbgwrap {
+//    ($($args:expr),*) => { println!($($args),*) }
+//}
 
-/*
 macro_rules! dbgwrap {
     ($($args:expr),*) => {};
 }
-*/
+
 // helper stuff
 struct AddWithCarry {
     pub min: u8,
     pub max: u8,
     pub len: usize,
-    pub val: Vec<u8>
+    pub val: Vec<u8>,
 }
 
 impl AddWithCarry {
     fn new(min: u8, max: u8, len: usize) -> Self {
         Self {
-            min, max, len,
-            val: vec![min; len]
+            min,
+            max,
+            len,
+            val: vec![min; len],
         }
     }
 }
@@ -45,7 +46,7 @@ impl Iterator for AddWithCarry {
                 min: self.min,
                 max: self.max,
                 len: self.len,
-                val: self.val.clone()
+                val: self.val.clone(),
             })
         } else {
             None
@@ -173,10 +174,17 @@ impl GridSliceState {
         };
 
         // note the last condition here makes assumptions that don't generalize beyond the 3 case
-        run_vec[0] > run_vec[run_vec.len() - 1]
-            || run_vec.len() == 1
-            || (run_vec.iter().all(|x| *x == 1)
-                && cur_pos_to_id_byte[0] < cur_pos_to_id_byte[cur_pos_to_id_byte.len() - 1])
+        /*
+                run_vec[0] > run_vec[run_vec.len() - 1]
+                    || run_vec.len() == 1
+                    || (run_vec.iter().all(|x| *x == 1)
+                        && cur_pos_to_id_byte[0] < cur_pos_to_id_byte[cur_pos_to_id_byte.len() - 1])
+        */
+        run_vec.iter().lt(run_vec.iter().rev())
+            || (run_vec.iter().eq(run_vec.iter().rev())
+                && cur_pos_to_id_byte
+                    .iter()
+                    .le(cur_pos_to_id_byte.iter().rev()))
     }
 
     fn pass_not_isomorphic(
@@ -405,7 +413,8 @@ impl GridSliceRelation {
                 x.id_to_len[x_id as usize] + y_pos_vol == y.id_to_len[y_id as usize]
             } else {
                 // either the piece id is unused or it is full
-                x.id_to_len[x_id as usize] == x.id_to_len.len() as u8 || x.id_to_len[x_id as usize] == 0
+                x.id_to_len[x_id as usize] == x.id_to_len.len() as u8
+                    || x.id_to_len[x_id as usize] == 0
             }
         }) && y.id_to_len.iter().enumerate().all(|a| {
             let y_id = a.0 as u8;
@@ -511,13 +520,14 @@ impl GridSliceRelation {
         ];
         if let Some(_fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
             dbgwrap!(
-                "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?}",
+                "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?} and flip {}",
                 _fail.0,
                 x,
                 y,
                 x,
                 y,
-                piece_map
+                piece_map,
+                flip
             );
             Err(())
         } else {
@@ -623,13 +633,7 @@ impl Grid {
                     // note i should do all add_with_carry uses like this
                     AddWithCarry::new(0, len, len as usize).flat_map(move |piece_map| {
                         (0..2).flat_map(move |flip| {
-                                     GridSliceRelation::new(
-                                        len,
-                                        x,
-                                        y,
-                                        &piece_map.val,
-                                        flip != 0,
-                                    )
+                            GridSliceRelation::new(len, x, y, &piece_map.val, flip != 0)
                         })
                     })
                 })
@@ -649,6 +653,7 @@ impl Grid {
     }
 
     fn find_slice_by_render(&self, a: &'static str) -> GridSliceState {
+        println!("finding slice: {}", a);
         self.slice_state
             .iter()
             .find(|x| format!["{}", x] == a)
@@ -667,12 +672,13 @@ impl Grid {
     fn solve_iter(
         &self,
         slice_state: GridSliceState,
-        stack: &mut Vec<GridSliceState>,
-        tiling: &mut Vec<Vec<GridSliceState>>,
+        piece_map: Vec<u8>,
+        stack: &mut Vec<(GridSliceState, Vec<u8>)>,
+        tiling: &mut Vec<Vec<(GridSliceState, Vec<u8>)>>,
     ) {
-        stack.push(slice_state.clone());
+        stack.push((slice_state.clone(), piece_map.clone()));
         println!("STACK");
-        stack.iter().for_each(|x| println!("{}", x));
+        stack.iter().for_each(|x| println!("{}", x.0));
         println!("");
 
         // note there are duplicate methods that we don't take into account and i'm not sure how
@@ -712,11 +718,17 @@ impl Grid {
                             if x.flip {
                                 self.solve_iter(
                                     GridSliceState::reverse(x._func.0.clone()),
+                                    x._piece_map.clone(),
                                     stack,
                                     tiling,
                                 );
                             } else {
-                                self.solve_iter(x._func.0.clone(), stack, tiling);
+                                self.solve_iter(
+                                    x._func.0.clone(),
+                                    x._piece_map.clone(),
+                                    stack,
+                                    tiling,
+                                );
                             }
                             traverse_set.insert(child_str);
                         }
@@ -729,12 +741,17 @@ impl Grid {
     fn solve(&self) -> usize {
         let mut stack = Vec::new();
         let mut tiling = Vec::new();
-        self.solve_iter(self.solve_base(), &mut stack, &mut tiling);
+        self.solve_iter(
+            self.solve_base(),
+            (0..self._len).collect(),
+            &mut stack,
+            &mut tiling,
+        );
 
         println!("tilings (length = {})", tiling.len());
         tiling.iter().enumerate().for_each(|x| {
             println!("TILING {}", x.0);
-            x.1.iter().for_each(|y| println!("{:?}\t{}", y, y));
+            x.1.iter().for_each(|y| println!("{:?}\t{}", y.0, y.0));
         });
 
         tiling.len()
@@ -774,31 +791,27 @@ mod tests {
         use super::*;
 
         #[test]
-        fn tests_tetrominoes_basic() {
-            GridSliceRelation::new(
-                4,
-                &GridSliceState::new(
-                    4,
-                    &vec![4, 4, 4, 4],
-                    &vec![0, 1, 2, 3]
-                ).unwrap(),
-                 &GridSliceState::new(
-                    4, 
-                    &vec![0, 0, 0, 4],
-                    &vec![3, 3, 3, 3]
-                ).unwrap(),
-                &vec![4, 4, 4, 4],
-                false
-            ).unwrap();
-        }
-
-        #[test]
-        fn tests_tetrominoes_slice_state() {
+        fn test_tetrominoes_basic() {
+            /*
+            GridSliceState::new(4, &vec![0, 4, 4, 4], &vec![3, 2, 2, 1]).unwrap();
             let grid = Grid::new(4);
-            grid.slice_state.iter().enumerate().for_each(|(i, x)| println!("{}: {}", i, x));
-            grid.solve();
-            
-            assert![false];
+            let a = grid.find_slice_by_render("| 4    4    4    4 |");
+            let b = grid.find_slice_by_render("| 4 || 4    4 || 4 |");
+            let c = grid.find_slice_by_render("| 3 || 2    2 || 3 |");
+            let d = grid.find_slice_by_render("| 2 || 4    4 || 2 |");
+            let e = grid.find_slice_by_render("| 1 || 2    2 || 1 |");
+
+            // GridSliceRelation::new(4, &a, &b, todo!(), false);
+            */
+        }
+        #[test]
+        fn test_tetrominoes_slice_state() {
+            let grid = Grid::new(4);
+            grid.slice_state
+                .iter()
+                .enumerate()
+                .for_each(|(i, x)| println!("{}: {}", i, x));
+            assert_eq![grid.solve(), 117];
         }
     }
 
@@ -915,14 +928,14 @@ mod tests {
                 fn get_reference() -> Vec<GridSliceState> {
                     vec![
                         GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A
-                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 1, 2]).unwrap(), // A'
+                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(), // A'
                         GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(), // A''
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(), // B
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 0, 2]).unwrap(), // C
                         GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 2, 1]).unwrap(), // D
                         GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(), // E
                         GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(3, &vec![0, 1, 2], &vec![2, 2, 1]).unwrap(), // G
+                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(), // G
                     ]
                 }
 
@@ -967,26 +980,25 @@ mod tests {
 
                     [
                         ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", vec![0, 1, 2], false),
+                        ("| 1 || 2    2 |", "| 1 || 3 || 2 |", vec![3, 1, 2], true),
+                        ("| 1 || 2    2 |", "| 2 || 1 || 3 |", vec![3, 1, 2], false),
+                        ("| 1 || 2    2 |", "| 3 || 3    3 |", vec![3, 2, 1], true),
                         ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", vec![0, 1, 2], false),
                         ("| 3    3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3    3    3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
+                        ("| 3    3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
                         ("| 3    3    3 |", "| 3    3    3 |", vec![3, 3, 3], false),
                         ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", vec![1, 2, 3], false),
-                        ("| 1 || 3 || 2 |", "| 3    3 || 3 |", vec![1, 2, 3], false),
-                        ("| 3    3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
-                        ("| 3    3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
-                        ("| 2    2 || 1 |", "| 1 || 3 || 2 |", vec![3, 1, 2], false),
-                        // new
-                        ("| 2    2 || 1 |", "| 2 || 1 || 3 |", vec![3, 1, 2], true),
-                        ("| 2    2 || 1 |", "| 3    3 || 3 |", vec![3, 1, 2], true),
+                        ("| 1 || 3 || 2 |", "| 3 || 3    3 |", vec![2, 1, 3], true),
                         ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", vec![1, 2, 3], true),
-                        ("| 2 || 1 || 3 |", "| 3    3 || 3 |", vec![1, 2, 3], true),
+                        ("| 2 || 1 || 3 |", "| 3 || 3    3 |", vec![2, 1, 3], false),
                         ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", vec![1, 2, 3], true),
-                        ("| 3    3 || 3 |", "| 2    2 || 1 |", vec![3, 3, 3], true),
+                        ("| 3 || 3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
+                        ("| 3 || 3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
+                        ("| 3 || 3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], true),
+                        ("| 3 || 3    3 |", "| 3    3    3 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
                     ]
                     .iter()
                     .map(|x| {
@@ -1004,15 +1016,15 @@ mod tests {
                 #[test]
                 fn test_trominoes_general_slice_relation() {
                     let grid = Grid::new(3);
-                    let answers = get_reference();
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
-                            "{}: {} -> {} with piece_map {:?}",
-                            i, x._func.0, x._func.1, x._piece_map
+                            "{}: {} -> {} with piece_map {:?} and flip {}",
+                            i, x._func.0, x._func.1, x._piece_map, x.flip
                         );
                     });
 
+                    let answers = get_reference();
                     answers.iter().for_each(|x| {
                         if !grid.slice_relation.iter().any(|y| x == y) {
                             panic!("cannot find {:?} {} in slice_relation", x, x);
