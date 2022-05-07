@@ -626,7 +626,7 @@ impl GridTiling {
         }
     }
 
-    fn render_graph(&self) -> Vec<(u8, u8)> {
+    fn render_graph(&self) -> (Vec<(u8, u8)>, Vec<(usize, u8, u8)>) {
         // note we go through the tiling slice by slice and do the following:
         //   - if this is a new piece, assign it the next available global id, otherwise fetch the
         //     piece id of the immediate previous piece (recursing until we reach the first piece
@@ -703,8 +703,10 @@ impl GridTiling {
                     if let Some(edge) = pair {
                         if edge.0 > edge.1 {
                             Some((edge.0, edge.1))
-                        } else {
+                        } else if edge.0 < edge.1 {
                             Some((edge.1, edge.0))
+                        } else {
+                            None
                         }
                     } else {
                         None
@@ -715,7 +717,7 @@ impl GridTiling {
         ret.sort();
         ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
 
-        ret
+        (ret, state)
     }
 
     fn render_color(&self, graph: &Vec<(u8, u8)>) -> Vec<u8> {
@@ -723,17 +725,52 @@ impl GridTiling {
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
-        let mut color = Vec::new();
-
-        color
+        AddWithCarry::new(0, 4, graph.iter().map(|x| x.0).max().unwrap() as usize + 1)
+            .find(|color| {
+                // verify that no two colors are connected by an edge
+                graph
+                    .iter()
+                    .all(|edge| (color.val)[edge.0 as usize] != (color.val)[edge.1 as usize])
+            })
+            .unwrap()
+            .val
     }
 
     fn render(&self) {
-        let graph = self.render_graph();
-        let color = self.render_color(&graph);
+        let mut graph = self.render_graph();
+        let color = self.render_color(&graph.0);
 
         println!("graph: {:?}", &graph);
-        // println!("color: {:?}", &color);
+        println!("color: {:?}", &color);
+
+        self.slice_relation_stack.iter().enumerate().for_each(
+            |(cur_slice_relation_pos, cur_slice_relation)| {
+                cur_slice_relation.1.pos_to_id.iter().enumerate().for_each(
+                    |(cur_piece_pos, cur_piece_id)| {
+                        let global_id = self.render_graph_backtrack_slice_piece_id(
+                            &mut graph.1,
+                            cur_slice_relation_pos,
+                            *cur_piece_id,
+                        );
+
+                        print!(
+                            "\x1b[3{}m{}{}{}\x1b[39;49m",
+                            match color[global_id as usize] {
+                                0 => 1,
+                                1 => 2,
+                                2 => 3,
+                                3 => 4,
+                                _ => unreachable!(),
+                            },
+                            char::from_u32(0x00002588).unwrap(),
+                            char::from_u32(0x00002588).unwrap(),
+                            char::from_u32(0x00002588).unwrap(),
+                        );
+                    },
+                );
+                println!("");
+            },
+        )
     }
 }
 
