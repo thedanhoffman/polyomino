@@ -686,11 +686,8 @@ impl GridTiling {
                             }
                         }
                         2 => {
-                            // connect to top neighbor (if one exists and is connected)
-                            if cur_slice_pos > 0
-                                && (cur_slice.2)[cur_slice.0.pos_to_id[cur_piece_pos] as usize]
-                                    == *cur_piece_id
-                            {
+                            // connect to top neighbor (if one exists)
+                            if cur_slice_pos > 0 {
                                 println!("connecting current slice state id to previous slice state id");
                                 Some((
                                     cur_id,
@@ -775,15 +772,18 @@ impl GridTiling {
                         print!(
                             "\x1b[3{}m{}{}{}\x1b[39;49m",
                             match color[global_id as usize] {
-                                0 => 1,
-                                1 => 2,
+                                0 => 4,
+                                1 => 1,
                                 2 => 3,
-                                3 => 4,
+                                3 => 2,
                                 _ => unreachable!(),
                             },
-                            char::from_u32(0x00002588).unwrap(),
-                            char::from_u32(0x00002588).unwrap(),
-                            char::from_u32(0x00002588).unwrap(),
+                            global_id,
+                            global_id,
+                            global_id
+                            //char::from_u32(0x00002588).unwrap(),
+                            //char::from_u32(0x00002588).unwrap(),
+                            //char::from_u32(0x00002588).unwrap(),
                         );
                     },
                 );
