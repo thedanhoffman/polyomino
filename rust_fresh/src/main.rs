@@ -57,8 +57,8 @@ impl Iterator for AddWithCarry {
 struct GridSliceState<const LENGTH: usize> {
     // note: symmetries are not resolved in the type, so
     // multiple copies must be explicitly stored as-needed
-    pub id_to_len: Vec<GridLen>,
-    pub pos_to_id: Vec<GridSliceStatePieceID>,
+    pub id_to_len: [GridLen; LENGTH],
+    pub pos_to_id: [GridSliceStatePieceID; LENGTH]
 }
 
 impl<const LENGTH: usize> std::fmt::Display for GridSliceState<LENGTH> {
@@ -91,8 +91,8 @@ impl<const LENGTH: usize> std::fmt::Display for GridSliceState<LENGTH> {
 
 impl<const LENGTH: usize> GridSliceState<LENGTH> {
     fn pass_non_zero_len_has_pos(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+        cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_id_to_len_byte
             .iter()
@@ -101,8 +101,8 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_volume_divisible_by_piece_size(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+        cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_id_to_len_byte
             .iter()
@@ -113,9 +113,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_no_more_pos_than_len(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+         cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+  ) -> bool {
         cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
@@ -126,25 +126,25 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_id_len_always_inc(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        _cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+          cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+  ) -> bool {
         cur_id_to_len_byte.iter().is_sorted()
     }
 
     fn pass_every_pos_has_len(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+           cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+ ) -> bool {
         cur_pos_to_id_byte
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
     }
 
     fn pass_not_symmetric(
-        _cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+         cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+   ) -> bool {
         // piece ids are isomorphic to each other, so we can't do anything about the values
         // themselves, we can only do things with equality between them. we define a canonical
         // representation of a slice state by putting the longest contiguous run of equal ids first
@@ -180,9 +180,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_not_isomorphic(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+          cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+  ) -> bool {
         cur_pos_to_id_byte
             .iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
@@ -215,9 +215,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_not_disjoint(
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
-    ) -> bool {
+           cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+ ) -> bool {
         // maximum distance between any two IDs on the slice is
         // (n - 4) because the piece must bridge that gap on
         // the upper/lower slice
@@ -245,52 +245,47 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
 
     fn new(
         _len: GridLen,
-        cur_id_to_len_byte: &Vec<GridLen>,
-        cur_pos_to_id_byte: &Vec<GridSliceStatePieceID>,
+        cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> Result<Self, ()> {
         let checks = [
             (
                 "non zero len has pos",
-                Self::pass_non_zero_len_has_pos
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_non_zero_len_has_pos as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "volume divisible by piece size",
-                Self::pass_volume_divisible_by_piece_size
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_volume_divisible_by_piece_size as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "no more pos than len",
-                Self::pass_no_more_pos_than_len
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_no_more_pos_than_len as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "id len always inc",
-                Self::pass_id_len_always_inc
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_id_len_always_inc as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "every pos has len",
-                Self::pass_every_pos_has_len
-                    as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_every_pos_has_len as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "not symmetric",
-                Self::pass_not_symmetric as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_not_symmetric as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "not isomorphic",
-                Self::pass_not_isomorphic as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_not_isomorphic as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "not disjoint",
-                Self::pass_not_disjoint as fn(&Vec<GridLen>, &Vec<GridSliceStatePieceID>) -> bool,
+                Self::pass_not_disjoint as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
         ];
 
         if let Some(_fail) = checks
             .iter()
-            .find(|x| !(x.1)(&cur_id_to_len_byte, &cur_pos_to_id_byte))
+            .find(|x| !(x.1)(cur_id_to_len_byte, cur_pos_to_id_byte))
         {
             dbgwrap!(
                 "test {} failed for id_to_len: {:?}, pos_to_id: {:?}",
@@ -813,14 +808,14 @@ impl<const LENGTH: usize> Grid<LENGTH> {
 
         let mut ret = Vec::new();
 
-        let add_with_carry = |val: &mut Vec<GridLen>, min: u8, max: u8| {
+        let add_with_carry = |val: &mut [u8; LENGTH], min: u8, max: u8| {
             let mut pos = 0;
-            while pos < val.len() && val[pos] == max {
+            while pos < LENGTH && val[pos] == max {
                 val[pos] = min;
                 pos += 1;
             }
 
-            if pos < val.len() as usize {
+            if pos < LENGTH as usize {
                 val[pos] += 1;
                 true
             } else {
@@ -828,8 +823,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
             }
         };
 
-        let mut cur_id_to_len_byte = vec![0; len as usize];
-        let mut cur_pos_to_id_byte = vec![0; len as usize];
+        let mut cur_id_to_len_byte = [0; LENGTH];
+        let mut cur_pos_to_id_byte = [0; LENGTH];
 
         while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
             while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
@@ -839,7 +834,7 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                     &cur_id_to_len_byte,
                     &cur_pos_to_id_byte
                 );
-                if let Ok(t) = GridSliceState::new(len, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
+                if let Ok(t) = GridSliceState::<LENGTH>::new(LENGTH as u8, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
                     ret.push(t)
                 }
             }
@@ -1140,7 +1135,7 @@ mod tests {
                         (0..3)
                             .permutations(3)
                             .map(|x| {
-                                GridSliceState::<3>::pass_not_isomorphic(&vec![3, 3, 3], &x) as usize
+                                GridSliceState::<3>::pass_not_isomorphic(&[3, 3, 3], &[x[0], x[1], x[2]]) as usize
                             })
                             .sum::<usize>(),
                         1
@@ -1157,7 +1152,7 @@ mod tests {
 
                 #[test]
                 fn test_trominoes_general_slice_state_basic() {
-                    let a = GridSliceState::<3>::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap();
+                    let a = GridSliceState::<3>::new(3, &[0, 0, 3], &[2, 2, 2]).unwrap();
                     println!("{}", &a);
 
                     assert![a.symmetric()];
@@ -1166,15 +1161,15 @@ mod tests {
                 fn get_reference() -> Vec<GridSliceState<3>> {
                     // note: the paper says seven slice states because it has A = A' = A''
                     vec![
-                        GridSliceState::new(3, &vec![0, 0, 3], &vec![2, 2, 2]).unwrap(), // A
-                        GridSliceState::new(3, &vec![0, 3, 3], &vec![1, 2, 2]).unwrap(), // A'
-                        GridSliceState::new(3, &vec![3, 3, 3], &vec![0, 1, 2]).unwrap(), // A''
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 1, 2]).unwrap(), // B
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![1, 0, 2]).unwrap(), // C
-                        GridSliceState::new(3, &vec![1, 2, 3], &vec![0, 2, 1]).unwrap(), // D
-                        GridSliceState::new(3, &vec![2, 2, 2], &vec![0, 1, 2]).unwrap(), // E
-                        GridSliceState::new(3, &vec![1, 1, 1], &vec![0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(3, &vec![0, 1, 2], &vec![1, 2, 2]).unwrap(), // G
+                        GridSliceState::new(3, &[0, 0, 3], &[2, 2, 2]).unwrap(), // A
+                        GridSliceState::new(3, &[0, 3, 3], &[1, 2, 2]).unwrap(), // A'
+                        GridSliceState::new(3, &[3, 3, 3], &[0, 1, 2]).unwrap(), // A''
+                        GridSliceState::new(3, &[1, 2, 3], &[0, 1, 2]).unwrap(), // B
+                        GridSliceState::new(3, &[1, 2, 3], &[1, 0, 2]).unwrap(), // C
+                        GridSliceState::new(3, &[1, 2, 3], &[0, 2, 1]).unwrap(), // D
+                        GridSliceState::new(3, &[2, 2, 2], &[0, 1, 2]).unwrap(), // E
+                        GridSliceState::new(3, &[1, 1, 1], &[0, 1, 2]).unwrap(), // F
+                        GridSliceState::new(3, &[0, 1, 2], &[1, 2, 2]).unwrap(), // G
                     ]
                 }
 
