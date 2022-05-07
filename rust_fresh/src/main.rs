@@ -688,7 +688,6 @@ impl GridTiling {
                         2 => {
                             // connect to top neighbor (if one exists)
                             if cur_slice_pos > 0 {
-                                println!("connecting current slice state id to previous slice state id");
                                 Some((
                                     cur_id,
                                     self.render_graph_backtrack_slice_piece_id(
@@ -698,7 +697,6 @@ impl GridTiling {
                                     ),
                                 ))
                             } else {
-                                println!("not connecting current slice state id to previous slice state id");
                                 None
                             }
                         }
@@ -731,7 +729,6 @@ impl GridTiling {
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
 
-        println!("rendering {:?} with color", graph);
         AddWithCarry::new(0, 4, state.len())
             .find(|color| {
                 // verify that no two colors are connected by an edge
@@ -744,8 +741,6 @@ impl GridTiling {
     }
 
     fn render(&self) {
-        println!("TILING");
-
         println!(
             "{:?}\t{}",
             self.slice_relation_stack[0].0, self.slice_relation_stack[0].0
@@ -756,11 +751,9 @@ impl GridTiling {
         let mut graph = self.render_graph();
         let color = self.render_color(&graph.0, &graph.1);
 
-        println!("graph: {:?}", &graph);
-        println!("color: {:?}", &color);
-
         self.slice_relation_stack.iter().enumerate().for_each(
             |(cur_slice_relation_pos, cur_slice_relation)| {
+                if cur_slice_relation_pos >= 1 && cur_slice_relation_pos < self.slice_relation_stack.len() - 2 {
                 cur_slice_relation.1.pos_to_id.iter().enumerate().for_each(
                     |(cur_piece_pos, cur_piece_id)| {
                         let global_id = self.render_graph_backtrack_slice_piece_id(
@@ -770,7 +763,7 @@ impl GridTiling {
                         );
 
                         print!(
-                            "\x1b[3{}m{}{}{}\x1b[39;49m",
+                            "\x1b[3{}m{}{}\x1b[39;49m",
                             match color[global_id as usize] {
                                 0 => 4,
                                 1 => 1,
@@ -779,15 +772,14 @@ impl GridTiling {
                                 _ => unreachable!(),
                             },
                             global_id,
-                            global_id,
                             global_id
-                            //char::from_u32(0x00002588).unwrap(),
                             //char::from_u32(0x00002588).unwrap(),
                             //char::from_u32(0x00002588).unwrap(),
                         );
                     },
                 );
                 println!("");
+            }
             },
         )
     }
@@ -932,9 +924,6 @@ impl Grid {
         } else {
             let prev = stack.peek().1.clone();
 
-            println!("STACK");
-            stack.iter().for_each(|x| println!("{}\n{}\n", x.0, x.1));
-
             self.slice_relation
                 .iter()
                 // we generate the valid flips (sets the parity, effectively)
@@ -967,8 +956,6 @@ impl Grid {
                 })
                 .filter(|x| GridSliceState::non_canonical_equal(&x.0, &prev))
                 .for_each(|x| {
-                    println!("recursing on {}", x.1);
-
                     stack.push(x);
                     self.solve_iter(stack, tiling);
                     stack.pop();
@@ -1011,11 +998,10 @@ fn main() {
             grid.slice_relation.iter().for_each(|x| println!("{}", x))
         }
         "render" => {
-            let grid = Grid::new(3);
+            let grid = Grid::new(std::env::args().nth(2).unwrap().parse::<u8>().unwrap());
             let solve = grid.solve();
 
             println!("tiling count: {}", solve.len());
-
             solve.iter().for_each(|x| x.render());
         }
         _ => unreachable!(),
