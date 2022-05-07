@@ -97,15 +97,8 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.into_iter().any(|x| *x == id as u8))
     }
 
-    fn pass_volume_divisible_by_piece_size(
-        cur_id_to_len_byte: &[u8; LENGTH],
-        _cur_pos_to_id_byte: &[u8; LENGTH],
-    ) -> bool {
-        cur_id_to_len_byte
-            .into_iter()
-            .fold(0, |acc, x| acc + *x)
-            % LENGTH as u8
-            == 0
+    fn pass_volume_divisible_by_piece_size(cur_id_to_len_byte: &[u8; LENGTH]) -> bool {
+        cur_id_to_len_byte.into_iter().fold(0, |acc, x| acc + *x) % LENGTH as u8 == 0
     }
 
     fn pass_no_more_pos_than_len(
@@ -121,10 +114,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         })
     }
 
-    fn pass_id_len_always_inc(
-        cur_id_to_len_byte: &[u8; LENGTH],
-        _cur_pos_to_id_byte: &[u8; LENGTH],
-    ) -> bool {
+    fn pass_id_len_always_inc(cur_id_to_len_byte: &[u8; LENGTH]) -> bool {
         cur_id_to_len_byte.into_iter().is_sorted()
     }
 
@@ -137,10 +127,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
     }
 
-    fn pass_not_symmetric(
-        _cur_id_to_len_byte: &[u8; LENGTH],
-        cur_pos_to_id_byte: &[u8; LENGTH],
-    ) -> bool {
+    fn pass_not_symmetric(cur_pos_to_id_byte: &[u8; LENGTH]) -> bool {
         // piece ids are isomorphic to each other, so we can't do anything about the values
         // themselves, we can only do things with equality between them. we define a canonical
         // representation of a slice state by putting the longest contiguous run of equal ids first
@@ -239,62 +226,40 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             .all(|x| x)
     }
 
+    fn has_valid_id_to_len(cur_id_to_len_byte: &[u8; LENGTH]) -> bool {
+        Self::pass_volume_divisible_by_piece_size(cur_id_to_len_byte)
+            && Self::pass_id_len_always_inc(cur_id_to_len_byte)
+    }
+
+    fn has_valid_pos_to_id(cur_pos_to_id_byte: &[u8; LENGTH]) -> bool {
+        Self::pass_not_symmetric(cur_pos_to_id_byte)
+    }
+
+    fn has_valid_pair(
+        cur_id_to_len_byte: &[u8; LENGTH],
+        cur_pos_to_id_byte: &[u8; LENGTH],
+    ) -> bool {
+        Self::pass_non_zero_len_has_pos(cur_id_to_len_byte, cur_pos_to_id_byte)
+            && Self::pass_no_more_pos_than_len(cur_id_to_len_byte, cur_pos_to_id_byte)
+            && Self::pass_every_pos_has_len(cur_id_to_len_byte, cur_pos_to_id_byte)
+            && Self::pass_not_isomorphic(cur_id_to_len_byte, cur_pos_to_id_byte)
+            && Self::pass_not_disjoint(cur_id_to_len_byte, cur_pos_to_id_byte)
+    }
+
     fn new(
         cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> Result<Self, ()> {
-        let checks = [
-            (
-                "non zero len has pos",
-                Self::pass_non_zero_len_has_pos as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "volume divisible by piece size",
-                Self::pass_volume_divisible_by_piece_size
-                    as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "no more pos than len",
-                Self::pass_no_more_pos_than_len as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "id len always inc",
-                Self::pass_id_len_always_inc as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "every pos has len",
-                Self::pass_every_pos_has_len as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "not symmetric",
-                Self::pass_not_symmetric as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "not isomorphic",
-                Self::pass_not_isomorphic as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-            (
-                "not disjoint",
-                Self::pass_not_disjoint as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
-            ),
-        ];
-
-        if let Some(_fail) = checks
-            .into_iter()
-            .find(|x| !(x.1)(cur_id_to_len_byte, cur_pos_to_id_byte))
+        if Self::has_valid_id_to_len(cur_id_to_len_byte)
+            && Self::has_valid_pos_to_id(cur_pos_to_id_byte)
+            && Self::has_valid_pair(cur_id_to_len_byte, cur_pos_to_id_byte)
         {
-            dbgwrap!(
-                "test {} failed for id_to_len: {:?}, pos_to_id: {:?}",
-                _fail.0,
-                cur_id_to_len_byte,
-                cur_pos_to_id_byte
-            );
-            Err(())
-        } else {
             Ok(GridSliceState::<LENGTH> {
                 id_to_len: *cur_id_to_len_byte,
                 pos_to_id: *cur_pos_to_id_byte,
             })
+        } else {
+            Err(())
         }
     }
 
@@ -330,16 +295,11 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn symmetric(&self) -> bool {
-        Self::non_canonical_equal_full(
-            &self.id_to_len,
-            &self.pos_to_id,
-            &self.id_to_len,
-            &{
-                let mut tmp = self.pos_to_id;
-                tmp.reverse();
-                tmp
-            },
-        )
+        Self::non_canonical_equal_full(&self.id_to_len, &self.pos_to_id, &self.id_to_len, &{
+            let mut tmp = self.pos_to_id;
+            tmp.reverse();
+            tmp
+        })
     }
 
     fn pos_to_id(&self, flip: bool, pos: usize) -> u8 {
@@ -408,7 +368,6 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
         piece_map: &[u8; LENGTH],
-        _flip: bool,
     ) -> bool {
         // the volume of a piece must increase by the number of times it occurs in the next slice.
         // we know a piece occurs in the next slice if the length is less than three and we map the
@@ -456,7 +415,6 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
         piece_map: &[u8; LENGTH],
-        _flip: bool,
     ) -> bool {
         x.id_to_len.into_iter().enumerate().all(|(x_id, x_len)| if x_len == 0 || x_len == x.id_to_len.len() as u8 { piece_map[x_id] == x.id_to_len.len() as u8 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
                     && y.id_to_len.into_iter().enumerate().all(|(y_id, y_len)| if y_len == 0 { piece_map.into_iter().filter(|y_id_cur| **y_id_cur == y_id as u8).count() == 0 } else { true })
@@ -500,6 +458,25 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         }
     }
 
+    fn has_valid_x_y_piece_map(
+        x: &GridSliceState<LENGTH>,
+        y: &GridSliceState<LENGTH>,
+        piece_map: &[u8; LENGTH],
+    ) -> bool {
+        Self::pass_inc_vol(x, y, piece_map) && Self::pass_map_valid_domain(x, y, piece_map)
+    }
+
+    fn has_valid_set(
+        x: &GridSliceState<LENGTH>,
+        y: &GridSliceState<LENGTH>,
+        piece_map: &[u8; LENGTH],
+        flip: bool,
+    ) -> bool {
+        Self::pass_no_int_bord(x, y, piece_map, flip)
+            && Self::pass_connected(x, y, piece_map, flip)
+            && Self::pass_unique_flip(x, y, piece_map, flip)
+    }
+
     fn new(
         _len: GridLen,
         x: &GridSliceState<LENGTH>,
@@ -507,77 +484,16 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         piece_map: &[u8; LENGTH],
         flip: bool,
     ) -> Result<Self, ()> {
-        // note it might be a good idea to make these fn casts into a type alias
-        let checks = [
-            (
-                "no int bord",
-                Self::pass_no_int_bord
-                    as fn(
-                        &GridSliceState<LENGTH>,
-                        &GridSliceState<LENGTH>,
-                        &[u8; LENGTH],
-                        bool,
-                    ) -> bool,
-            ),
-            (
-                "inc vol",
-                Self::pass_inc_vol
-                    as fn(
-                        &GridSliceState<LENGTH>,
-                        &GridSliceState<LENGTH>,
-                        &[u8; LENGTH],
-                        bool,
-                    ) -> bool,
-            ),
-            (
-                "map valid domain",
-                Self::pass_map_valid_domain
-                    as fn(
-                        &GridSliceState<LENGTH>,
-                        &GridSliceState<LENGTH>,
-                        &[u8; LENGTH],
-                        bool,
-                    ) -> bool,
-            ),
-            (
-                "connected",
-                Self::pass_connected
-                    as fn(
-                        &GridSliceState<LENGTH>,
-                        &GridSliceState<LENGTH>,
-                        &[u8; LENGTH],
-                        bool,
-                    ) -> bool,
-            ),
-            (
-                "unique flip",
-                Self::pass_unique_flip
-                    as fn(
-                        &GridSliceState<LENGTH>,
-                        &GridSliceState<LENGTH>,
-                        &[u8; LENGTH],
-                        bool,
-                    ) -> bool,
-            ),
-        ];
-        if let Some(_fail) = checks.into_iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
-            dbgwrap!(
-                "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?} and flip {}",
-                _fail.0,
-                x,
-                y,
-                x,
-                y,
-                piece_map,
-                flip
-            );
-            Err(())
-        } else {
+        if Self::has_valid_x_y_piece_map(x, y, piece_map)
+            && Self::has_valid_set(x, y, piece_map, flip)
+        {
             Ok(GridSliceRelation {
                 _func: (x.clone(), y.clone()),
                 _piece_map: piece_map.clone(),
                 flip,
             })
+        } else {
+            Err(())
         }
     }
 }
@@ -852,44 +768,32 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         // note: this is a very naive way of doing it, but should be updated by the time I need to
         // present
 
-        let mut ret = Vec::new();
-
-        let add_with_carry = |val: &mut [u8; LENGTH], min: u8, max: u8| {
-            let mut pos = 0;
-            while pos < LENGTH && val[pos] == max {
-                val[pos] = min;
-                pos += 1;
-            }
-
-            if pos < LENGTH as usize {
-                val[pos] += 1;
-                true
-            } else {
-                false
-            }
-        };
-
-        let mut cur_id_to_len_byte = [0; LENGTH];
-        let mut cur_pos_to_id_byte = [0; LENGTH];
-
-        while add_with_carry(&mut cur_id_to_len_byte, 0, LENGTH as u8) {
-            while add_with_carry(&mut cur_pos_to_id_byte, 0, LENGTH as u8 - 1) {
-                dbgwrap!(
-                    "{} {:?} {:?}",
-                    len,
-                    &cur_id_to_len_byte,
-                    &cur_pos_to_id_byte
-                );
-                if let Ok(t) = GridSliceState::<LENGTH>::new(
-                    &cur_id_to_len_byte,
-                    &cur_pos_to_id_byte,
-                ) {
-                    ret.push(t)
+        AddWithCarry::<LENGTH>::new(0, LENGTH as u8)
+            .flat_map(move |cur_id_to_len_byte| {
+                if GridSliceState::has_valid_id_to_len(&cur_id_to_len_byte.val) {
+                    Some(AddWithCarry::<LENGTH>::new(0, LENGTH as u8 - 1).flat_map(
+                        move |cur_pos_to_id_byte| {
+                            if GridSliceState::has_valid_pos_to_id(&cur_pos_to_id_byte.val)
+                                && GridSliceState::has_valid_pair(
+                                    &cur_id_to_len_byte.val,
+                                    &cur_pos_to_id_byte.val,
+                                )
+                            {
+                                Some(GridSliceState {
+                                    id_to_len: cur_id_to_len_byte.val,
+                                    pos_to_id: cur_pos_to_id_byte.val,
+                                })
+                            } else {
+                                None
+                            }
+                        },
+                    ))
+                } else {
+                    None
                 }
-            }
-        }
-
-        ret
+            })
+            .flatten()
+            .collect::<Vec<GridSliceState<LENGTH>>>()
     }
 
     fn new_slice_relation(
@@ -901,12 +805,24 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                 slice_state.iter().flat_map(move |y| {
                     // note i should do all add_with_carry uses like this
                     AddWithCarry::<LENGTH>::new(0, LENGTH as u8).flat_map(move |piece_map| {
-                        (0..2).flat_map(move |flip| {
-                            GridSliceRelation::new(LENGTH as u8, x, y, &piece_map.val, flip != 0)
-                        })
+                        if GridSliceRelation::has_valid_x_y_piece_map(x, y, &piece_map.val) {
+                            Some((0..2).flat_map(move |flip| {
+                                if GridSliceRelation::has_valid_set(x, y, &piece_map.val, flip == 0) {
+                                    Some(GridSliceRelation {
+                                        _func: (x.clone(), y.clone()),
+                                        _piece_map: piece_map.val.clone(),
+                                        flip: flip == 0,
+                                    })
+                                } else {
+                                    None
+                                }
+                            }))
+                        } else {
+                            None
+                        }
                     })
                 })
-            })
+            }).flatten()
             .collect::<Vec<_>>()
     }
 
