@@ -42,7 +42,7 @@ impl<const LENGTH: usize> Iterator for AddWithCarry<LENGTH> {
             Some(AddWithCarry::<LENGTH> {
                 min: self.min,
                 max: self.max,
-                val: self.val.clone(),
+                val: self.val,
             })
         } else {
             None
@@ -92,9 +92,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_id_to_len_byte
-            .iter()
+            .into_iter()
             .enumerate()
-            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.iter().any(|x| *x == id as u8))
+            .all(|(id, len)| *len == 0 || cur_pos_to_id_byte.into_iter().any(|x| *x == id as u8))
     }
 
     fn pass_volume_divisible_by_piece_size(
@@ -102,10 +102,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         _cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_id_to_len_byte
-            .iter()
-            .map(|x| *x as usize)
-            .sum::<usize>()
-            % cur_id_to_len_byte.len()
+            .into_iter()
+            .fold(0, |acc, x| acc + *x)
+            % LENGTH as u8
             == 0
     }
 
@@ -113,10 +112,10 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
-        cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
+        cur_id_to_len_byte.into_iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
-                    .iter()
+                    .into_iter()
                     .filter(|x| **x == id as u8)
                     .count()
         })
@@ -126,7 +125,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         cur_id_to_len_byte: &[u8; LENGTH],
         _cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
-        cur_id_to_len_byte.iter().is_sorted()
+        cur_id_to_len_byte.into_iter().is_sorted()
     }
 
     fn pass_every_pos_has_len(
@@ -134,7 +133,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_pos_to_id_byte
-            .iter()
+            .into_iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
     }
 
@@ -155,7 +154,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             let mut ret = Vec::new();
             let mut start_pos = 0;
             let mut start_val = cur_pos_to_id_byte[0];
-            for i in cur_pos_to_id_byte.iter().enumerate() {
+            for i in cur_pos_to_id_byte.into_iter().enumerate() {
                 let x_pos = i.0;
                 let x_val = *i.1;
 
@@ -172,8 +171,8 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         run_vec.iter().lt(run_vec.iter().rev())
             || (run_vec.iter().eq(run_vec.iter().rev())
                 && cur_pos_to_id_byte
-                    .iter()
-                    .le(cur_pos_to_id_byte.iter().rev()))
+                    .into_iter()
+                    .le(cur_pos_to_id_byte.into_iter().rev()))
     }
 
     fn pass_not_isomorphic(
@@ -181,7 +180,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_pos_to_id_byte
-            .iter()
+            .into_iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
                 Some(if let Some(map) = state.iter().find(|y| y.0 == *x) {
                     map.1
@@ -196,7 +195,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
                     state.push((
                         *x,
                         cur_id_to_len_byte
-                            .iter()
+                            .into_iter()
                             .enumerate()
                             .find(|(y_id, y_len)| {
                                 state.iter().all(|z| z.0 != *y_id as u8) // not already been mapped
@@ -208,7 +207,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
                     state[state.len() - 1].1
                 })
             })
-            .eq(cur_pos_to_id_byte.iter().map(|x| *x))
+            .eq(cur_pos_to_id_byte.into_iter().map(|x| *x))
     }
 
     fn pass_not_disjoint(
@@ -220,7 +219,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         // the upper/lower slice
 
         cur_pos_to_id_byte
-            .iter()
+            .into_iter()
             .enumerate()
             .scan(Vec::new(), |state: &mut Vec<(usize, u8)>, (x_pos, x_id)| {
                 Some(
@@ -241,7 +240,6 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn new(
-        _len: GridLen,
         cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> Result<Self, ()> {
@@ -282,7 +280,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         ];
 
         if let Some(_fail) = checks
-            .iter()
+            .into_iter()
             .find(|x| !(x.1)(cur_id_to_len_byte, cur_pos_to_id_byte))
         {
             dbgwrap!(
@@ -294,28 +292,36 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             Err(())
         } else {
             Ok(GridSliceState::<LENGTH> {
-                id_to_len: cur_id_to_len_byte.clone(),
-                pos_to_id: cur_pos_to_id_byte.clone(),
+                id_to_len: *cur_id_to_len_byte,
+                pos_to_id: *cur_pos_to_id_byte,
             })
         }
     }
 
-    fn non_canonical_equal(a: &GridSliceState<LENGTH>, b: &GridSliceState<LENGTH>) -> bool {
+    fn non_canonical_equal_full(
+        a_id_to_len: &[u8; LENGTH],
+        a_pos_to_id: &[u8; LENGTH],
+        b_id_to_len: &[u8; LENGTH],
+        b_pos_to_id: &[u8; LENGTH],
+    ) -> bool {
         // note the overloaded equality operator is for the *canonical form*
-        a.id_to_len.iter().eq(b.id_to_len.iter())
-            && a.pos_to_id
-                .iter()
-                .map(|x| a.id_to_len[*x as usize])
-                .eq(b.pos_to_id.iter().map(|x| b.id_to_len[*x as usize]))
-            && a.pos_to_id
-                .iter()
-                .zip(a.pos_to_id.iter().skip(1))
+        a_id_to_len.into_iter().eq(b_id_to_len.into_iter())
+            && a_pos_to_id
+                .into_iter()
+                .map(|x| a_id_to_len[*x as usize])
+                .eq(b_pos_to_id.into_iter().map(|x| b_id_to_len[*x as usize]))
+            && a_pos_to_id
+                .into_iter()
+                .zip(a_pos_to_id.into_iter().skip(1))
                 .map(|(a, b)| a == b)
-                .eq(b
-                    .pos_to_id
-                    .iter()
-                    .zip(b.pos_to_id.iter().skip(1))
+                .eq(b_pos_to_id
+                    .into_iter()
+                    .zip(b_pos_to_id.into_iter().skip(1))
                     .map(|(a, b)| a == b))
+    }
+
+    fn non_canonical_equal(a: &GridSliceState<LENGTH>, b: &GridSliceState<LENGTH>) -> bool {
+        Self::non_canonical_equal_full(&a.id_to_len, &a.pos_to_id, &b.id_to_len, &b.pos_to_id)
     }
 
     fn reverse(mut a: GridSliceState<LENGTH>) -> GridSliceState<LENGTH> {
@@ -324,7 +330,16 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn symmetric(&self) -> bool {
-        Self::non_canonical_equal(&Self::reverse(self.clone()), &self)
+        Self::non_canonical_equal_full(
+            &self.id_to_len,
+            &self.pos_to_id,
+            &self.id_to_len,
+            &{
+                let mut tmp = self.pos_to_id;
+                tmp.reverse();
+                tmp
+            },
+        )
     }
 
     fn pos_to_id(&self, flip: bool, pos: usize) -> u8 {
@@ -335,11 +350,11 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
         }
     }
 
-    fn pos_to_id_iter<'a>(&'a self, flip: bool) -> Box<dyn Iterator<Item = &'a u8> + 'a> {
+    fn pos_to_id_iter<'a>(&'a self, flip: bool) -> Box<dyn Iterator<Item = u8> + 'a> {
         if !flip {
-            Box::new(self.pos_to_id.iter())
+            Box::new(self.pos_to_id.into_iter())
         } else {
-            Box::new(self.pos_to_id.iter().rev())
+            Box::new(self.pos_to_id.into_iter().rev())
         }
     }
 }
@@ -379,11 +394,11 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
 
                 (piece_map[x_pos_right_id as usize] != y_pos_right_id) as u8
                     + (y_id != y_pos_right_id) as u8
-                    + (*x_id != x_pos_right_id) as u8
+                    + (x_id != x_pos_right_id) as u8
             } else {
                 3
             };
-            let cross_left = piece_map[*x_id as usize] != y_id;
+            let cross_left = piece_map[x_id as usize] != y_id;
 
             cross_left as u8 + cross_right_up_down as u8 != 1
         })
@@ -399,15 +414,15 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         // we know a piece occurs in the next slice if the length is less than three and we map the
         // x piece id to the y piece id because the ids are only unique within a slice)
 
-        piece_map.iter().enumerate().all(|a| {
+        piece_map.into_iter().enumerate().all(|a| {
             let x_id = a.0 as u8;
             let y_id = *a.1;
 
             if y_id != y.id_to_len.len() as u8 {
                 let y_pos_vol = y
                     .pos_to_id
-                    .iter()
-                    .filter(|y_id_cur| **y_id_cur == y_id)
+                    .into_iter()
+                    .filter(|y_id_cur| *y_id_cur == y_id)
                     .count() as u8;
 
                 // the x piece id length plus the number of positions in the new slice is the
@@ -418,17 +433,16 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
                 x.id_to_len[x_id as usize] == x.id_to_len.len() as u8
                     || x.id_to_len[x_id as usize] == 0
             }
-        }) && y.id_to_len.iter().enumerate().all(|a| {
+        }) && y.id_to_len.into_iter().enumerate().all(|a| {
             let y_id = a.0 as u8;
-            let _y_len = *a.1;
 
-            if !piece_map.iter().any(|y_id_cur| *y_id_cur == y_id) {
+            if !piece_map.into_iter().any(|y_id_cur| *y_id_cur == y_id) {
                 // if the current piece has not been mapped from the x id, the volume must be the
                 // same as the positional volume
                 let y_pos_vol = y
                     .pos_to_id
-                    .iter()
-                    .filter(|y_id_cur| **y_id_cur == y_id)
+                    .into_iter()
+                    .filter(|y_id_cur| *y_id_cur == y_id)
                     .count() as u8;
 
                 y_pos_vol == y.id_to_len[y_id as usize]
@@ -444,8 +458,8 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         piece_map: &[u8; LENGTH],
         _flip: bool,
     ) -> bool {
-        x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == x.id_to_len.len() as u8 { piece_map[x_id] == x.id_to_len.len() as u8 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
-                    && y.id_to_len.iter().enumerate().all(|(y_id, y_len)| if *y_len == 0 { piece_map.iter().filter(|y_id_cur| **y_id_cur == y_id as u8).count() == 0 } else { true })
+        x.id_to_len.into_iter().enumerate().all(|(x_id, x_len)| if x_len == 0 || x_len == x.id_to_len.len() as u8 { piece_map[x_id] == x.id_to_len.len() as u8 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
+                    && y.id_to_len.into_iter().enumerate().all(|(y_id, y_len)| if y_len == 0 { piece_map.into_iter().filter(|y_id_cur| **y_id_cur == y_id as u8).count() == 0 } else { true })
         // if the length of a piece in y is zero, then it does not map
     }
 
@@ -459,7 +473,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         //
         // note: this might also not generalize beyond the 3 case
 
-        piece_map.iter().enumerate().all(|a| {
+        piece_map.into_iter().enumerate().all(|a| {
             let x_id = a.0 as u8;
             let y_id = *a.1;
 
@@ -546,7 +560,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
                     ) -> bool,
             ),
         ];
-        if let Some(_fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
+        if let Some(_fail) = checks.into_iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
             dbgwrap!(
                 "test {} failed for {} -> {} ({:?} -> {:?}) with piece_map {:?} and flip {}",
                 _fail.0,
@@ -634,9 +648,9 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         // while the current stack maps a previous id to the current id, go back
         while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
             .2
-            .iter()
+            .into_iter()
             .enumerate()
-            .find(|(_, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
+            .find(|(_, cur_piece_y_id)| *cur_piece_y_id == cur_piece_id)
         {
             cur_slice_pos = cur_slice_pos - 1;
             cur_piece_id = cur_map.0 as u8;
@@ -867,7 +881,6 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                     &cur_pos_to_id_byte
                 );
                 if let Ok(t) = GridSliceState::<LENGTH>::new(
-                    LENGTH as u8,
                     &cur_id_to_len_byte,
                     &cur_pos_to_id_byte,
                 ) {
@@ -1047,20 +1060,6 @@ mod tests {
         use super::*;
 
         #[test]
-        fn test_tetrominoes_basic() {
-            /*
-            GridSliceState::new(4, &vec![0, 4, 4, 4], &vec![3, 2, 2, 1]).unwrap();
-            let grid = Grid::new(4);
-            let a = grid.find_slice_by_render("| 4    4    4    4 |");
-            let b = grid.find_slice_by_render("| 4 || 4    4 || 4 |");
-            let c = grid.find_slice_by_render("| 3 || 2    2 || 3 |");
-            let d = grid.find_slice_by_render("| 2 || 4    4 || 2 |");
-            let e = grid.find_slice_by_render("| 1 || 2    2 || 1 |");
-
-            // GridSliceRelation::new(4, &a, &b, todo!(), false);
-            */
-        }
-        #[test]
         fn test_tetrominoes_slice_state() {
             let grid = Grid::<4>::new();
             grid.slice_state
@@ -1088,7 +1087,6 @@ mod tests {
                 slice_relation_len,
                 grid_solve_len
             )];
-            assert![false];
         }
     }
 
@@ -1199,7 +1197,7 @@ mod tests {
 
                 #[test]
                 fn test_trominoes_general_slice_state_basic() {
-                    let a = GridSliceState::<3>::new(3, &[0, 0, 3], &[2, 2, 2]).unwrap();
+                    let a = GridSliceState::new(&[0, 0, 3], &[2, 2, 2]).unwrap();
                     println!("{}", &a);
 
                     assert![a.symmetric()];
@@ -1208,15 +1206,15 @@ mod tests {
                 fn get_reference() -> Vec<GridSliceState<3>> {
                     // note: the paper says seven slice states because it has A = A' = A''
                     vec![
-                        GridSliceState::new(3, &[0, 0, 3], &[2, 2, 2]).unwrap(), // A
-                        GridSliceState::new(3, &[0, 3, 3], &[1, 2, 2]).unwrap(), // A'
-                        GridSliceState::new(3, &[3, 3, 3], &[0, 1, 2]).unwrap(), // A''
-                        GridSliceState::new(3, &[1, 2, 3], &[0, 1, 2]).unwrap(), // B
-                        GridSliceState::new(3, &[1, 2, 3], &[1, 0, 2]).unwrap(), // C
-                        GridSliceState::new(3, &[1, 2, 3], &[0, 2, 1]).unwrap(), // D
-                        GridSliceState::new(3, &[2, 2, 2], &[0, 1, 2]).unwrap(), // E
-                        GridSliceState::new(3, &[1, 1, 1], &[0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(3, &[0, 1, 2], &[1, 2, 2]).unwrap(), // G
+                        GridSliceState::new(&[0, 0, 3], &[2, 2, 2]).unwrap(), // A
+                        GridSliceState::new(&[0, 3, 3], &[1, 2, 2]).unwrap(), // A'
+                        GridSliceState::new(&[3, 3, 3], &[0, 1, 2]).unwrap(), // A''
+                        GridSliceState::new(&[1, 2, 3], &[0, 1, 2]).unwrap(), // B
+                        GridSliceState::new(&[1, 2, 3], &[1, 0, 2]).unwrap(), // C
+                        GridSliceState::new(&[1, 2, 3], &[0, 2, 1]).unwrap(), // D
+                        GridSliceState::new(&[2, 2, 2], &[0, 1, 2]).unwrap(), // E
+                        GridSliceState::new(&[1, 1, 1], &[0, 1, 2]).unwrap(), // F
+                        GridSliceState::new(&[0, 1, 2], &[1, 2, 2]).unwrap(), // G
                     ]
                 }
 
