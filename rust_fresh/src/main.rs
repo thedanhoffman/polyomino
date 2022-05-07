@@ -940,7 +940,7 @@ impl Grid {
                 tiling.push(stack.clone());
             }
         } else {
-            let prev = stack.peek().1.clone();
+            let prev = stack.peek().1;
 
             self.slice_relation
                 .iter()
@@ -948,7 +948,7 @@ impl Grid {
                 .map(|x| {
                     (
                         if x.flip {
-                            GridSliceState::reverse(x._func.0.clone()).clone()
+                            GridSliceState::reverse(x._func.0.clone())
                         } else {
                             x._func.0.clone()
                         },
@@ -1310,7 +1310,7 @@ mod tests {
                 #[test]
                 fn test_trominoes_general_solve() {
                     let grid = Grid::new(3);
-                    assert_eq![grid.solve(), 10];
+                    assert_eq![grid.solve().len(), 10];
                 }
             }
         }
