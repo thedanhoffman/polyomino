@@ -11,40 +11,37 @@ macro_rules! dbgwrap {
 }
 
 // helper stuff
-struct AddWithCarry {
+struct AddWithCarry<const LENGTH: usize> {
     pub min: u8,
     pub max: u8,
-    pub len: usize,
-    pub val: Vec<u8>,
+    pub val: [u8; LENGTH],
 }
 
-impl AddWithCarry {
-    fn new(min: u8, max: u8, len: usize) -> Self {
+impl<const LENGTH: usize> AddWithCarry<LENGTH> {
+    fn new(min: u8, max: u8) -> Self {
         Self {
             min,
             max,
-            len,
-            val: vec![min; len],
+            val: [min; LENGTH],
         }
     }
 }
 
-impl Iterator for AddWithCarry {
-    type Item = AddWithCarry;
+impl<const LENGTH: usize> Iterator for AddWithCarry<LENGTH> {
+    type Item = AddWithCarry<LENGTH>;
 
-    fn next(&mut self) -> Option<AddWithCarry> {
+    fn next(&mut self) -> Option<AddWithCarry<LENGTH>> {
         let mut pos = 0;
-        while pos < self.val.len() && self.val[pos] == self.max {
+        while pos < LENGTH && self.val[pos] == self.max {
             self.val[pos] = self.min;
             pos += 1;
         }
 
-        if pos < self.val.len() as usize {
+        if pos < LENGTH as usize {
             self.val[pos] += 1;
-            Some(AddWithCarry {
+            Some(AddWithCarry::<LENGTH> {
                 min: self.min,
                 max: self.max,
-                len: self.len,
                 val: self.val.clone(),
             })
         } else {
@@ -350,7 +347,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct GridSliceRelation<const LENGTH: usize> {
     pub _func: (GridSliceState<LENGTH>, GridSliceState<LENGTH>),
-    pub _piece_map: Vec<u8>,
+    pub _piece_map: [u8; LENGTH],
     pub flip: bool,
 }
 
@@ -362,7 +359,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
     fn pass_no_int_bord(
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        piece_map: &Vec<u8>,
+        piece_map: &[u8; LENGTH],
         flip: bool,
     ) -> bool {
         // note this, again, is specific to the 3x3 case but can be generalized through some
@@ -395,7 +392,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
     fn pass_inc_vol(
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        piece_map: &Vec<u8>,
+        piece_map: &[u8; LENGTH],
         _flip: bool,
     ) -> bool {
         // the volume of a piece must increase by the number of times it occurs in the next slice.
@@ -444,7 +441,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
     fn pass_map_valid_domain(
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        piece_map: &Vec<u8>,
+        piece_map: &[u8; LENGTH],
         _flip: bool,
     ) -> bool {
         x.id_to_len.iter().enumerate().all(|(x_id, x_len)| if *x_len == 0 || *x_len == x.id_to_len.len() as u8 { piece_map[x_id] == x.id_to_len.len() as u8 } else { true }) // if the length of a piece in x is zero or three, then it does not map (an x piece does not have to map)
@@ -455,7 +452,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
     fn pass_connected(
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        piece_map: &Vec<u8>,
+        piece_map: &[u8; LENGTH],
         flip: bool,
     ) -> bool {
         // verify that each x<->y mapping have a connecting between them
@@ -476,7 +473,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
     fn pass_unique_flip(
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        _piece_map: &Vec<u8>,
+        _piece_map: &[u8; LENGTH],
         flip: bool,
     ) -> bool {
         // we want to have a second parity possible for everything possible ("flip" is whether we
@@ -493,7 +490,7 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
         _len: GridLen,
         x: &GridSliceState<LENGTH>,
         y: &GridSliceState<LENGTH>,
-        piece_map: &Vec<u8>,
+        piece_map: &[u8; LENGTH],
         flip: bool,
     ) -> Result<Self, ()> {
         // note it might be a good idea to make these fn casts into a type alias
@@ -501,27 +498,52 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
             (
                 "no int bord",
                 Self::pass_no_int_bord
-                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                    as fn(
+                        &GridSliceState<LENGTH>,
+                        &GridSliceState<LENGTH>,
+                        &[u8; LENGTH],
+                        bool,
+                    ) -> bool,
             ),
             (
                 "inc vol",
                 Self::pass_inc_vol
-                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                    as fn(
+                        &GridSliceState<LENGTH>,
+                        &GridSliceState<LENGTH>,
+                        &[u8; LENGTH],
+                        bool,
+                    ) -> bool,
             ),
             (
                 "map valid domain",
                 Self::pass_map_valid_domain
-                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                    as fn(
+                        &GridSliceState<LENGTH>,
+                        &GridSliceState<LENGTH>,
+                        &[u8; LENGTH],
+                        bool,
+                    ) -> bool,
             ),
             (
                 "connected",
                 Self::pass_connected
-                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                    as fn(
+                        &GridSliceState<LENGTH>,
+                        &GridSliceState<LENGTH>,
+                        &[u8; LENGTH],
+                        bool,
+                    ) -> bool,
             ),
             (
                 "unique flip",
                 Self::pass_unique_flip
-                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                    as fn(
+                        &GridSliceState<LENGTH>,
+                        &GridSliceState<LENGTH>,
+                        &[u8; LENGTH],
+                        bool,
+                    ) -> bool,
             ),
         ];
         if let Some(_fail) = checks.iter().find(|a| !(a.1)(x, y, piece_map, flip)) {
@@ -567,7 +589,7 @@ impl<const LENGTH: usize> std::fmt::Display for GridSliceRelation<LENGTH> {
 struct GridTiling<const LENGTH: usize> {
     // note we don't keep GridSliceRelation because we don't persist the flip bit and other things
     // like that
-    pub slice_relation_stack: Vec<(GridSliceState<LENGTH>, GridSliceState<LENGTH>, Vec<u8>)>,
+    pub slice_relation_stack: Vec<(GridSliceState<LENGTH>, GridSliceState<LENGTH>, [u8; LENGTH])>,
 }
 
 impl<const LENGTH: usize> GridTiling<LENGTH> {
@@ -577,7 +599,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         }
     }
 
-    fn push(&mut self, a: (GridSliceState<LENGTH>, GridSliceState<LENGTH>, Vec<u8>)) {
+    fn push(&mut self, a: (GridSliceState<LENGTH>, GridSliceState<LENGTH>, [u8; LENGTH])) {
         self.slice_relation_stack.push(a);
     }
 
@@ -586,7 +608,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             .truncate(self.slice_relation_stack.len() - 1);
     }
 
-    fn peek(&self) -> (GridSliceState<LENGTH>, GridSliceState<LENGTH>, Vec<u8>) {
+    fn peek(&self) -> (GridSliceState<LENGTH>, GridSliceState<LENGTH>, [u8; LENGTH]) {
         self.slice_relation_stack[self.slice_relation_stack.len() - 1].clone()
     }
 
@@ -651,7 +673,12 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
 
         let mut ret = Vec::new();
         let mut state = Vec::new();
-        for (cur_slice_pos, cur_slice) in self.slice_relation_stack.iter().enumerate() {
+        for (cur_slice_pos, cur_slice) in self
+            .slice_relation_stack
+            .iter()
+            .enumerate()
+            .filter(|x| x.0 >= 2 && x.0 <= self.slice_relation_stack.len() - 3)
+        {
             for (cur_piece_pos, cur_piece_id) in cur_slice.1.pos_to_id.iter().enumerate() {
                 let cur_id = self.render_graph_backtrack_slice_piece_id(
                     &mut state,
@@ -732,13 +759,15 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         (ret, state)
     }
 
-    fn render_color(&self, graph: &Vec<(u8, u8)>, state: &Vec<(usize, u8, u8)>) -> Vec<u8> {
+    fn render_color(&self, graph: &Vec<(u8, u8)>, state: &Vec<(usize, u8, u8)>) -> [u8; LENGTH] {
         // note graph coloring is an interesting problem but its outside the scope here. we have
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
 
-        AddWithCarry::new(0, 4, state.len())
+        println!("graph: {:?}", graph);
+
+        AddWithCarry::<LENGTH>::new(0, LENGTH as u8)
             .find(|color| {
                 // verify that no two colors are connected by an edge
                 graph
@@ -804,7 +833,7 @@ struct Grid<const LENGTH: usize> {
 }
 
 impl<const LENGTH: usize> Grid<LENGTH> {
-    fn new_slice_state(len: GridLen) -> Vec<GridSliceState<LENGTH>> {
+    fn new_slice_state() -> Vec<GridSliceState<LENGTH>> {
         // generate all slice states individually
         // note: this is a very naive way of doing it, but should be updated by the time I need to
         // present
@@ -829,8 +858,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         let mut cur_id_to_len_byte = [0; LENGTH];
         let mut cur_pos_to_id_byte = [0; LENGTH];
 
-        while add_with_carry(&mut cur_id_to_len_byte, 0, len) {
-            while add_with_carry(&mut cur_pos_to_id_byte, 0, len - 1) {
+        while add_with_carry(&mut cur_id_to_len_byte, 0, LENGTH as u8) {
+            while add_with_carry(&mut cur_pos_to_id_byte, 0, LENGTH as u8 - 1) {
                 dbgwrap!(
                     "{} {:?} {:?}",
                     len,
@@ -851,7 +880,6 @@ impl<const LENGTH: usize> Grid<LENGTH> {
     }
 
     fn new_slice_relation(
-        len: GridLen,
         slice_state: &Vec<GridSliceState<LENGTH>>,
     ) -> Vec<GridSliceRelation<LENGTH>> {
         slice_state
@@ -859,9 +887,9 @@ impl<const LENGTH: usize> Grid<LENGTH> {
             .flat_map(move |x| {
                 slice_state.iter().flat_map(move |y| {
                     // note i should do all add_with_carry uses like this
-                    AddWithCarry::new(0, len, len as usize).flat_map(move |piece_map| {
+                    AddWithCarry::<LENGTH>::new(0, LENGTH as u8).flat_map(move |piece_map| {
                         (0..2).flat_map(move |flip| {
-                            GridSliceRelation::new(len, x, y, &piece_map.val, flip != 0)
+                            GridSliceRelation::new(LENGTH as u8, x, y, &piece_map.val, flip != 0)
                         })
                     })
                 })
@@ -871,15 +899,15 @@ impl<const LENGTH: usize> Grid<LENGTH> {
 
     fn new() -> Self {
         // note: size is the length/height of the square and the size of each partitioned area
-        let slice_state = Self::new_slice_state(LENGTH as u8);
-        let slice_relation = Self::new_slice_relation(LENGTH as u8, &slice_state);
+        let slice_state = Self::new_slice_state();
+        let slice_relation = Self::new_slice_relation(&slice_state);
         Self {
             slice_state,
             slice_relation,
         }
     }
 
-    fn solve_base(&self) -> (GridSliceState<LENGTH>, GridSliceState<LENGTH>, Vec<u8>) {
+    fn solve_base(&self) -> (GridSliceState<LENGTH>, GridSliceState<LENGTH>, [u8; LENGTH]) {
         let canonical = self
             .slice_state
             .iter()
@@ -988,12 +1016,23 @@ fn main() {
         }
         "render" => {
             match std::env::args().nth(2).unwrap().parse::<u8>().unwrap() {
-                3 => Grid::<3>::new().solve(),
+                2 => {
+                    Grid::<2>::new().solve();
+                }
+                3 => {
+                    Grid::<3>::new().solve();
+                }
+                4 => {
+                    Grid::<4>::new().solve();
+                }
+                5 => {
+                    Grid::<5>::new().solve();
+                }
+                6 => {
+                    Grid::<6>::new().solve();
+                }
                 _ => unreachable!(),
             };
-
-            //println!("tiling count: {}", solve.len());
-            //solve.iter().for_each(|x| x.render());
         }
         _ => unreachable!(),
     }
@@ -1215,32 +1254,32 @@ mod tests {
                 use super::*;
 
                 fn get_reference() -> Vec<GridSliceRelation<3>> {
-                    let slice_state = Grid::<3>::new_slice_state(3);
+                    let slice_state = Grid::<3>::new_slice_state();
                     let find = |a: &'static str| -> &GridSliceState<3> {
                         slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
                     };
 
                     [
-                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", vec![0, 1, 2], false),
-                        ("| 1 || 2    2 |", "| 1 || 3 || 2 |", vec![3, 1, 2], true),
-                        ("| 1 || 2    2 |", "| 2 || 1 || 3 |", vec![3, 1, 2], false),
-                        ("| 1 || 2    2 |", "| 3 || 3    3 |", vec![3, 2, 1], true),
-                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", vec![0, 1, 2], false),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3    3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
-                        ("| 3    3    3 |", "| 3    3    3 |", vec![3, 3, 3], false),
-                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", vec![1, 2, 3], false),
-                        ("| 1 || 3 || 2 |", "| 3 || 3    3 |", vec![2, 1, 3], true),
-                        ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", vec![1, 2, 3], true),
-                        ("| 2 || 1 || 3 |", "| 3 || 3    3 |", vec![2, 1, 3], false),
-                        ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", vec![1, 2, 3], true),
-                        ("| 3 || 3    3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3 || 3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
-                        ("| 3 || 3    3 |", "| 1 || 2    2 |", vec![3, 3, 3], true),
-                        ("| 3 || 3    3 |", "| 3    3    3 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 1 || 2    2 |", vec![3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", vec![3, 3, 3], false),
+                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", [0, 1, 2], false),
+                        ("| 1 || 2    2 |", "| 1 || 3 || 2 |", [3, 1, 2], true),
+                        ("| 1 || 2    2 |", "| 2 || 1 || 3 |", [3, 1, 2], false),
+                        ("| 1 || 2    2 |", "| 3 || 3    3 |", [3, 2, 1], true),
+                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", [0, 1, 2], false),
+                        ("| 3    3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                        ("| 3    3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                        ("| 3    3    3 |", "| 3    3    3 |", [3, 3, 3], false),
+                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", [1, 2, 3], false),
+                        ("| 1 || 3 || 2 |", "| 3 || 3    3 |", [2, 1, 3], true),
+                        ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", [1, 2, 3], true),
+                        ("| 2 || 1 || 3 |", "| 3 || 3    3 |", [2, 1, 3], false),
+                        ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", [1, 2, 3], true),
+                        ("| 3 || 3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                        ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                        ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], true),
+                        ("| 3 || 3    3 |", "| 3    3    3 |", [3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                        ("| 3 || 3 || 3 |", "| 3    3    3 |", [3, 3, 3], false),
                     ]
                     .iter()
                     .map(|x| {
