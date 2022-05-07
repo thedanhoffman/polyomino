@@ -1,6 +1,5 @@
 #![feature(is_sorted)]
 type GridLen = u8;
-type GridVol = u16;
 
 type GridSliceStatePieceID = u8;
 //macro_rules! dbgwrap {
@@ -594,10 +593,6 @@ impl GridTiling {
         self.slice_relation_stack[self.slice_relation_stack.len() - 1].clone()
     }
 
-    fn iter(&self) -> std::slice::Iter<'_, (GridSliceState, GridSliceState, Vec<u8>)> {
-        self.slice_relation_stack.iter()
-    }
-
     fn len(&self) -> usize {
         self.slice_relation_stack.len()
     }
@@ -622,7 +617,7 @@ impl GridTiling {
             .2
             .iter()
             .enumerate()
-            .find(|(cur_piece_x_id, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
+            .find(|(_, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
         {
             cur_slice_pos = cur_slice_pos - 1;
             cur_piece_id = cur_map.0 as u8;
@@ -773,8 +768,8 @@ impl GridTiling {
                 if cur_slice_relation_pos >= 1
                     && cur_slice_relation_pos < self.slice_relation_stack.len() - 2
                 {
-                    cur_slice_relation.1.pos_to_id.iter().enumerate().for_each(
-                        |(cur_piece_pos, cur_piece_id)| {
+                    cur_slice_relation.1.pos_to_id.iter().for_each(
+                        |cur_piece_id| {
                             let global_id = self.render_graph_backtrack_slice_piece_id(
                                 &mut graph.1,
                                 cur_slice_relation_pos,
@@ -811,22 +806,7 @@ struct Grid {
 }
 
 impl Grid {
-    fn add_with_carry(val: &mut Vec<GridLen>, min: u8, max: u8) -> bool {
-        let mut pos = 0;
-        while pos < val.len() && val[pos] == max {
-            val[pos] = min;
-            pos += 1;
-        }
-
-        if pos < val.len() as usize {
-            val[pos] += 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn new_slice_state(len: GridLen) -> Vec<GridSliceState> {
+   fn new_slice_state(len: GridLen) -> Vec<GridSliceState> {
         // generate all slice states individually
         // note: this is a very naive way of doing it, but should be updated by the time I need to
         // present
@@ -896,15 +876,6 @@ impl Grid {
             slice_state,
             slice_relation,
         }
-    }
-
-    fn find_slice_by_render(&self, a: &'static str) -> GridSliceState {
-        println!("finding slice: {}", a);
-        self.slice_state
-            .iter()
-            .find(|x| format!["{}", x] == a)
-            .unwrap()
-            .clone()
     }
 
     fn solve_base(&self) -> (GridSliceState, GridSliceState, Vec<u8>) {
