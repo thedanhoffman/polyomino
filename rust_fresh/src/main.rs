@@ -585,26 +585,155 @@ impl GridTiling {
         self.slice_relation_stack.len()
     }
 
-    fn render_graph(
-        slice_relation_stack: &Vec<(GridSliceState, GridSliceState, Vec<u8>)>,
-    ) -> Vec<(u8, u8)> {
-        let mut graph = Vec::new();
+    fn render_graph_backtrack_slice_piece_id(
+        &self,
+        state: &mut Vec<(usize, u8, u8)>,
+        slice_start: usize,
+        piece_id: u8,
+    ) -> u8 {
+        // keep backtracking via piece_map until nothing maps back to the piece
+        let mut cur_slice_pos = slice_start;
+        let mut cur_piece_id = piece_id;
 
-        graph
+        if cur_slice_pos > 0 {
+            while let Some(prev_next_map) = self.slice_relation_stack[cur_slice_pos - 1]
+                .2
+                .iter()
+                .enumerate()
+                .find(|(prev_piece_id, prev_next_piece_id)| **prev_next_piece_id == cur_piece_id)
+            {
+                cur_slice_pos = cur_slice_pos - 1;
+                cur_piece_id = prev_next_map.0 as u8;
+
+                if cur_slice_pos == 0 {
+                    break;
+                }
+            }
+        }
+
+        if let Some(global_piece_map) = state
+            .iter()
+            .find(|x| x.0 == cur_slice_pos && x.1 == cur_piece_id)
+        {
+            global_piece_map.2
+        } else {
+            // note every piece at every slice above the current should be defined, so
+            // it might be easier to re-write this to assert if that fails
+            // this is a new piece, so add it
+            let cur_global_id = state.len() as u8;
+            state.push((cur_slice_pos, cur_piece_id, cur_global_id));
+            cur_global_id
+        }
     }
 
-    fn render_color(graph: &Vec<(u8, u8)>) -> Vec<u8> {
+    fn render_graph(&self) -> Vec<(u8, u8)> {
+        // note we go through the tiling slice by slice and do the following:
+        //   - if this is a new piece, assign it the next available global id, otherwise fetch the
+        //     piece id of the immediate previous piece (recursing until we reach the first piece
+        //     and looking up the first piece in some map)
+        //   - recurse up on parent id and add an edge in the global graph
+        //   - recurse up on left and right and add an edge in the global graph
+        //
+        // the graph is represented as an adjacency list
+
+        let mut ret = Vec::new();
+        let mut state = Vec::new();
+        for (cur_slice_pos, cur_slice) in self.slice_relation_stack.iter().enumerate() {
+            for (cur_piece_pos, cur_piece_id) in cur_slice.1.pos_to_id.iter().enumerate() {
+                let cur_id = self.render_graph_backtrack_slice_piece_id(
+                    &mut state,
+                    cur_slice_pos,
+                    *cur_piece_id,
+                );
+
+                // note the number is 3 because of the number of non-down ways that a polyomino can
+                // border another, not because of an edge case with the 3 case
+
+                ret.extend((0..3).flat_map(|x| {
+                    let pair = match x {
+                        0 => {
+                            // connect to left neighbor (if one exists)
+                            if cur_piece_pos > 0 {
+                                Some((
+                                    cur_id,
+                                    self.render_graph_backtrack_slice_piece_id(
+                                        &mut state,
+                                        cur_slice_pos,
+                                        cur_slice.1.pos_to_id[cur_piece_pos - 1],
+                                    ),
+                                ))
+                            } else {
+                                None
+                            }
+                        }
+                        1 => {
+                            // connect to right neighbor (if one exists)
+                            if cur_piece_pos < cur_slice.1.pos_to_id.len() - 1 {
+                                Some((
+                                    cur_id,
+                                    self.render_graph_backtrack_slice_piece_id(
+                                        &mut state,
+                                        cur_slice_pos,
+                                        cur_slice.1.pos_to_id[cur_piece_pos + 1],
+                                    ),
+                                ))
+                            } else {
+                                None
+                            }
+                        }
+                        2 => {
+                            // connect to top neighbor (if one exists)
+                            if cur_slice_pos > 0 {
+                                Some((
+                                    cur_id,
+                                    self.render_graph_backtrack_slice_piece_id(
+                                        &mut state,
+                                        cur_slice_pos - 1,
+                                        self.slice_relation_stack[cur_slice_pos - 1].1.pos_to_id
+                                            [cur_piece_pos],
+                                    ),
+                                ))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    if let Some(edge) = pair {
+                        if edge.0 > edge.1 {
+                            Some((edge.0, edge.1))
+                        } else {
+                            Some((edge.1, edge.0))
+                        }
+                    } else {
+                        None
+                    }
+                }));
+            }
+        }
+        ret.sort();
+        ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
+
+        ret
+    }
+
+    fn render_color(&self, graph: &Vec<(u8, u8)>) -> Vec<u8> {
+        // note graph coloring is an interesting problem but its outside the scope here. we have
+        // four as an upper bound for the number of colors (because of the four-color theorem, but
+        // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
+        // colorings and return the first
         let mut color = Vec::new();
 
         color
     }
 
     fn render(&self) {
-        let graph = Self::render_graph(&self.slice_relation_stack);
-        let color = Self::render_color(&graph);
+        let graph = self.render_graph();
+        let color = self.render_color(&graph);
 
-        panic!("graph: {:#?}", &graph);
-        panic!("color: {:#?}", &color);
+        println!("graph: {:?}", &graph);
+        // println!("color: {:?}", &color);
     }
 }
 
@@ -791,7 +920,7 @@ impl Grid {
         }
     }
 
-    fn solve(&self) -> usize {
+    fn solve(&self) -> Vec<GridTiling> {
         let mut stack = GridTiling::new();
         let mut tiling = Vec::new();
 
@@ -811,7 +940,7 @@ impl Grid {
                 .for_each(|y| println!("{:?}\t{}", y.1, y.1));
         });
 
-        tiling.len()
+        tiling
     }
 }
 
@@ -825,13 +954,13 @@ fn main() {
             let grid = Grid::new(3);
             grid.slice_relation.iter().for_each(|x| println!("{}", x))
         }
-        "s" => {
-            let grid = Grid::new(3);
-            println!("grid.solve(): {}", grid.solve())
-        }
         "render" => {
             let grid = Grid::new(3);
-            grid.solve();
+            let solve = grid.solve();
+
+            println!("tiling count: {}", solve.len());
+
+            solve.iter().for_each(|x| x.render());
         }
         _ => unreachable!(),
     }
