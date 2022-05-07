@@ -310,7 +310,20 @@ impl GridSliceState {
 
     fn non_canonical_equal(a: &GridSliceState, b: &GridSliceState) -> bool {
         // note the overloaded equality operator is for the *canonical form*
-        format!["{}", a] == format!["{}", b]
+        a.id_to_len.iter().eq(b.id_to_len.iter())
+            && a.pos_to_id
+                .iter()
+                .map(|x| a.id_to_len[*x as usize])
+                .eq(b.pos_to_id.iter().map(|x| b.id_to_len[*x as usize]))
+            && a.pos_to_id
+                .iter()
+                .zip(a.pos_to_id.iter().skip(1))
+                .map(|(a, b)| a == b)
+                .eq(b
+                    .pos_to_id
+                    .iter()
+                    .zip(b.pos_to_id.iter().skip(1))
+                    .map(|(a, b)| a == b))
     }
 
     fn reverse(mut a: GridSliceState) -> GridSliceState {
@@ -368,15 +381,19 @@ impl GridSliceRelation {
         x.pos_to_id_iter(flip).enumerate().all(|(x_pos, x_id)| {
             let y_id = y.pos_to_id(false, x_pos);
 
+            let cross_right_up_down = if x_pos < x.pos_to_id.len() - 1 {
+                let y_pos_right_id = y.pos_to_id(false, x_pos + 1);
+                let x_pos_right_id = x.pos_to_id(flip, x_pos + 1);
+                
+                (piece_map[x_pos_right_id as usize] != y_pos_right_id) as u8
+                     + (y_id != y_pos_right_id) as u8
+                    + (*x_id != x_pos_right_id) as u8
+            } else {
+                3
+            };
             let cross_left = piece_map[*x_id as usize] != y_id;
-            let cross_right = x_pos == x.pos_to_id.len() - 1
-                || piece_map[x.pos_to_id(flip, x_pos + 1) as usize]
-                    != y.pos_to_id(false, x_pos + 1);
-            let cross_up = x_pos == x.pos_to_id.len() - 1 || y_id != y.pos_to_id(false, x_pos + 1);
-            let cross_down =
-                x_pos == x.pos_to_id.len() - 1 || *x_id != x.pos_to_id(flip, x_pos + 1);
 
-            cross_left as u8 + cross_right as u8 + cross_up as u8 + cross_down as u8 != 1
+            cross_left as u8 + cross_right_up_down as u8 != 1
         })
     }
 
@@ -595,25 +612,25 @@ impl GridTiling {
         let mut cur_slice_pos = slice_start;
         let mut cur_piece_id = piece_id;
 
-            // note that we map piece ids to global ids by a left/right position and a slice
-            // relation, which implies one of two options. as a matter of convention we always use
-            // the bottom-most id for the relation (i.e. we take the y of the first without a match
-            // instead of the x of the last with a match)
+        // note that we map piece ids to global ids by a left/right position and a slice
+        // relation, which implies one of two options. as a matter of convention we always use
+        // the bottom-most id for the relation (i.e. we take the y of the first without a match
+        // instead of the x of the last with a match)
 
-            // while the current stack maps a previous id to the current id, go back
-            while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
-                .2
-                .iter()
-                .enumerate()
-                .find(|(cur_piece_x_id, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
-            {
-                cur_slice_pos = cur_slice_pos - 1;
-                cur_piece_id = cur_map.0 as u8;
+        // while the current stack maps a previous id to the current id, go back
+        while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
+            .2
+            .iter()
+            .enumerate()
+            .find(|(cur_piece_x_id, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
+        {
+            cur_slice_pos = cur_slice_pos - 1;
+            cur_piece_id = cur_map.0 as u8;
 
-                if cur_slice_pos == 0 {
-                    break;
-                }
+            if cur_slice_pos == 0 {
+                break;
             }
+        }
 
         if let Some(global_piece_map) = state
             .iter()
@@ -693,7 +710,7 @@ impl GridTiling {
                                     self.render_graph_backtrack_slice_piece_id(
                                         &mut state,
                                         cur_slice_pos - 1,
-                                        cur_slice.0.pos_to_id[cur_piece_pos]
+                                        cur_slice.0.pos_to_id[cur_piece_pos],
                                     ),
                                 ))
                             } else {
@@ -753,33 +770,34 @@ impl GridTiling {
 
         self.slice_relation_stack.iter().enumerate().for_each(
             |(cur_slice_relation_pos, cur_slice_relation)| {
-                if cur_slice_relation_pos >= 1 && cur_slice_relation_pos < self.slice_relation_stack.len() - 2 {
-                cur_slice_relation.1.pos_to_id.iter().enumerate().for_each(
-                    |(cur_piece_pos, cur_piece_id)| {
-                        let global_id = self.render_graph_backtrack_slice_piece_id(
-                            &mut graph.1,
-                            cur_slice_relation_pos,
-                            *cur_piece_id,
-                        );
+                if cur_slice_relation_pos >= 1
+                    && cur_slice_relation_pos < self.slice_relation_stack.len() - 2
+                {
+                    cur_slice_relation.1.pos_to_id.iter().enumerate().for_each(
+                        |(cur_piece_pos, cur_piece_id)| {
+                            let global_id = self.render_graph_backtrack_slice_piece_id(
+                                &mut graph.1,
+                                cur_slice_relation_pos,
+                                *cur_piece_id,
+                            );
 
-                        print!(
-                            "\x1b[3{}m{}{}\x1b[39;49m",
-                            match color[global_id as usize] {
-                                0 => 4,
-                                1 => 1,
-                                2 => 3,
-                                3 => 2,
-                                _ => unreachable!(),
-                            },
-                            global_id,
-                            global_id
-                            //char::from_u32(0x00002588).unwrap(),
-                            //char::from_u32(0x00002588).unwrap(),
-                        );
-                    },
-                );
-                println!("");
-            }
+                            print!(
+                                "\x1b[3{}m{}{}\x1b[39;49m",
+                                match color[global_id as usize] {
+                                    0 => 4,
+                                    1 => 1,
+                                    2 => 3,
+                                    3 => 2,
+                                    _ => unreachable!(),
+                                },
+                                global_id,
+                                global_id //char::from_u32(0x00002588).unwrap(),
+                                          //char::from_u32(0x00002588).unwrap(),
+                            );
+                        },
+                    );
+                    println!("");
+                }
             },
         )
     }
