@@ -58,7 +58,7 @@ struct GridSliceState<const LENGTH: usize> {
     // note: symmetries are not resolved in the type, so
     // multiple copies must be explicitly stored as-needed
     pub id_to_len: [GridLen; LENGTH],
-    pub pos_to_id: [GridSliceStatePieceID; LENGTH]
+    pub pos_to_id: [GridSliceStatePieceID; LENGTH],
 }
 
 impl<const LENGTH: usize> std::fmt::Display for GridSliceState<LENGTH> {
@@ -102,7 +102,7 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
 
     fn pass_volume_divisible_by_piece_size(
         cur_id_to_len_byte: &[u8; LENGTH],
-        cur_pos_to_id_byte: &[u8; LENGTH],
+        _cur_pos_to_id_byte: &[u8; LENGTH],
     ) -> bool {
         cur_id_to_len_byte
             .iter()
@@ -113,9 +113,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_no_more_pos_than_len(
-         cur_id_to_len_byte: &[u8; LENGTH],
+        cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
-  ) -> bool {
+    ) -> bool {
         cur_id_to_len_byte.iter().enumerate().all(|(id, len)| {
             (*len as usize)
                 >= cur_pos_to_id_byte
@@ -126,25 +126,25 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_id_len_always_inc(
-          cur_id_to_len_byte: &[u8; LENGTH],
-        cur_pos_to_id_byte: &[u8; LENGTH],
-  ) -> bool {
+        cur_id_to_len_byte: &[u8; LENGTH],
+        _cur_pos_to_id_byte: &[u8; LENGTH],
+    ) -> bool {
         cur_id_to_len_byte.iter().is_sorted()
     }
 
     fn pass_every_pos_has_len(
-           cur_id_to_len_byte: &[u8; LENGTH],
+        cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
- ) -> bool {
+    ) -> bool {
         cur_pos_to_id_byte
             .iter()
             .all(|x| cur_id_to_len_byte[*x as usize] > 0)
     }
 
     fn pass_not_symmetric(
-         cur_id_to_len_byte: &[u8; LENGTH],
+        _cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
-   ) -> bool {
+    ) -> bool {
         // piece ids are isomorphic to each other, so we can't do anything about the values
         // themselves, we can only do things with equality between them. we define a canonical
         // representation of a slice state by putting the longest contiguous run of equal ids first
@@ -180,9 +180,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_not_isomorphic(
-          cur_id_to_len_byte: &[u8; LENGTH],
+        cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
-  ) -> bool {
+    ) -> bool {
         cur_pos_to_id_byte
             .iter()
             .scan(Vec::new(), |state: &mut Vec<(u8, u8)>, x| {
@@ -215,9 +215,9 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
     }
 
     fn pass_not_disjoint(
-           cur_id_to_len_byte: &[u8; LENGTH],
+        cur_id_to_len_byte: &[u8; LENGTH],
         cur_pos_to_id_byte: &[u8; LENGTH],
- ) -> bool {
+    ) -> bool {
         // maximum distance between any two IDs on the slice is
         // (n - 4) because the piece must bridge that gap on
         // the upper/lower slice
@@ -255,7 +255,8 @@ impl<const LENGTH: usize> GridSliceState<LENGTH> {
             ),
             (
                 "volume divisible by piece size",
-                Self::pass_volume_divisible_by_piece_size as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
+                Self::pass_volume_divisible_by_piece_size
+                    as fn(&[u8; LENGTH], &[u8; LENGTH]) -> bool,
             ),
             (
                 "no more pos than len",
@@ -378,9 +379,9 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
             let cross_right_up_down = if x_pos < x.pos_to_id.len() - 1 {
                 let y_pos_right_id = y.pos_to_id(false, x_pos + 1);
                 let x_pos_right_id = x.pos_to_id(flip, x_pos + 1);
-                
+
                 (piece_map[x_pos_right_id as usize] != y_pos_right_id) as u8
-                     + (y_id != y_pos_right_id) as u8
+                    + (y_id != y_pos_right_id) as u8
                     + (*x_id != x_pos_right_id) as u8
             } else {
                 3
@@ -504,7 +505,8 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
             ),
             (
                 "inc vol",
-                Self::pass_inc_vol as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
+                Self::pass_inc_vol
+                    as fn(&GridSliceState<LENGTH>, &GridSliceState<LENGTH>, &Vec<u8>, bool) -> bool,
             ),
             (
                 "map valid domain",
@@ -763,8 +765,11 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                 if cur_slice_relation_pos >= 1
                     && cur_slice_relation_pos < self.slice_relation_stack.len() - 2
                 {
-                    cur_slice_relation.1.pos_to_id.iter().for_each(
-                        |cur_piece_id| {
+                    cur_slice_relation
+                        .1
+                        .pos_to_id
+                        .iter()
+                        .for_each(|cur_piece_id| {
                             let global_id = self.render_graph_backtrack_slice_piece_id(
                                 &mut graph.1,
                                 cur_slice_relation_pos,
@@ -784,8 +789,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                                 global_id //char::from_u32(0x00002588).unwrap(),
                                           //char::from_u32(0x00002588).unwrap(),
                             );
-                        },
-                    );
+                        });
                     println!("");
                 }
             },
@@ -795,13 +799,12 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
 
 #[derive(Debug)]
 struct Grid<const LENGTH: usize> {
-    pub _len: GridLen,
     pub slice_state: Vec<GridSliceState<LENGTH>>,
     pub slice_relation: Vec<GridSliceRelation<LENGTH>>,
 }
 
 impl<const LENGTH: usize> Grid<LENGTH> {
-   fn new_slice_state(len: GridLen) -> Vec<GridSliceState<LENGTH> > {
+    fn new_slice_state(len: GridLen) -> Vec<GridSliceState<LENGTH>> {
         // generate all slice states individually
         // note: this is a very naive way of doing it, but should be updated by the time I need to
         // present
@@ -834,7 +837,11 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                     &cur_id_to_len_byte,
                     &cur_pos_to_id_byte
                 );
-                if let Ok(t) = GridSliceState::<LENGTH>::new(LENGTH as u8, &cur_id_to_len_byte, &cur_pos_to_id_byte) {
+                if let Ok(t) = GridSliceState::<LENGTH>::new(
+                    LENGTH as u8,
+                    &cur_id_to_len_byte,
+                    &cur_pos_to_id_byte,
+                ) {
                     ret.push(t)
                 }
             }
@@ -845,8 +852,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
 
     fn new_slice_relation(
         len: GridLen,
-        slice_state: &Vec<GridSliceState<LENGTH> >,
-    ) -> Vec<GridSliceRelation<LENGTH> > {
+        slice_state: &Vec<GridSliceState<LENGTH>>,
+    ) -> Vec<GridSliceRelation<LENGTH>> {
         slice_state
             .iter()
             .flat_map(move |x| {
@@ -867,7 +874,6 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         let slice_state = Self::new_slice_state(LENGTH as u8);
         let slice_relation = Self::new_slice_relation(LENGTH as u8, &slice_state);
         Self {
-            _len: LENGTH as u8,
             slice_state,
             slice_relation,
         }
@@ -896,7 +902,7 @@ impl<const LENGTH: usize> Grid<LENGTH> {
     }
 
     fn solve_iter(&self, stack: &mut GridTiling<LENGTH>, tiling: &mut Vec<GridTiling<LENGTH>>) {
-        if stack.len() as u8 == self._len + 3 {
+        if stack.len() == LENGTH + 3 {
             let prev = stack.peek();
             let base = self.solve_base();
 
@@ -962,9 +968,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                 "{:?}\t{}",
                 x.1.slice_relation_stack[0].0, x.1.slice_relation_stack[0].0
             );
-            x.1.slice_relation_stack
-                .iter()
-                .for_each(|y| println!("{:?}\t{}", y.1, y.1));
+
+            x.1.render();
         });
 
         tiling
@@ -984,7 +989,7 @@ fn main() {
         "render" => {
             match std::env::args().nth(2).unwrap().parse::<u8>().unwrap() {
                 3 => Grid::<3>::new().solve(),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             //println!("tiling count: {}", solve.len());
@@ -1135,7 +1140,10 @@ mod tests {
                         (0..3)
                             .permutations(3)
                             .map(|x| {
-                                GridSliceState::<3>::pass_not_isomorphic(&[3, 3, 3], &[x[0], x[1], x[2]]) as usize
+                                GridSliceState::<3>::pass_not_isomorphic(
+                                    &[3, 3, 3],
+                                    &[x[0], x[1], x[2]],
+                                ) as usize
                             })
                             .sum::<usize>(),
                         1
