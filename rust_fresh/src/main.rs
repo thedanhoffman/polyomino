@@ -799,13 +799,13 @@ impl GridTiling {
 }
 
 #[derive(Debug)]
-struct Grid {
+struct Grid<const LENGTH: usize> {
     pub _len: GridLen,
     pub slice_state: Vec<GridSliceState>,
     pub slice_relation: Vec<GridSliceRelation>,
 }
 
-impl Grid {
+impl<const LENGTH: usize> Grid<LENGTH> {
    fn new_slice_state(len: GridLen) -> Vec<GridSliceState> {
         // generate all slice states individually
         // note: this is a very naive way of doing it, but should be updated by the time I need to
@@ -867,12 +867,12 @@ impl Grid {
             .collect::<Vec<_>>()
     }
 
-    fn new(len: GridLen) -> Self {
+    fn new() -> Self {
         // note: size is the length/height of the square and the size of each partitioned area
-        let slice_state = Self::new_slice_state(len);
-        let slice_relation = Self::new_slice_relation(len, &slice_state);
+        let slice_state = Self::new_slice_state(LENGTH as u8);
+        let slice_relation = Self::new_slice_relation(LENGTH as u8, &slice_state);
         Self {
-            _len: len,
+            _len: LENGTH as u8,
             slice_state,
             slice_relation,
         }
@@ -979,19 +979,21 @@ impl Grid {
 fn main() {
     match std::env::args().nth(1).unwrap().as_str() {
         "ss" => {
-            let grid = Grid::new(3);
+            let grid = Grid::<3>::new();
             grid.slice_state.iter().for_each(|x| println!("{}", x))
         }
         "sr" => {
-            let grid = Grid::new(3);
+            let grid = Grid::<3>::new();
             grid.slice_relation.iter().for_each(|x| println!("{}", x))
         }
         "render" => {
-            let grid = Grid::new(std::env::args().nth(2).unwrap().parse::<u8>().unwrap());
-            let solve = grid.solve();
+            match std::env::args().nth(2).unwrap().parse::<u8>().unwrap() {
+                3 => Grid::<3>::new().solve(),
+                _ => unreachable!()
+            };
 
-            println!("tiling count: {}", solve.len());
-            solve.iter().for_each(|x| x.render());
+            //println!("tiling count: {}", solve.len());
+            //solve.iter().for_each(|x| x.render());
         }
         _ => unreachable!(),
     }
@@ -1021,7 +1023,7 @@ mod tests {
         }
         #[test]
         fn test_tetrominoes_slice_state() {
-            let grid = Grid::new(4);
+            let grid = Grid::<4>::new();
             grid.slice_state
                 .iter()
                 .enumerate()
@@ -1184,7 +1186,7 @@ mod tests {
                 #[test]
                 fn test_trominoes_general_slice_state() {
                     let answer = get_reference();
-                    let grid = Grid::new(3);
+                    let grid = Grid::<3>::new();
 
                     grid.slice_state
                         .iter()
@@ -1210,7 +1212,7 @@ mod tests {
                 use super::*;
 
                 fn get_reference() -> Vec<GridSliceRelation> {
-                    let slice_state = Grid::new_slice_state(3);
+                    let slice_state = Grid::<3>::new_slice_state(3);
                     let find = |a: &'static str| -> &GridSliceState {
                         slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
                     };
@@ -1252,7 +1254,7 @@ mod tests {
                 }
                 #[test]
                 fn test_trominoes_general_slice_relation() {
-                    let grid = Grid::new(3);
+                    let grid = Grid::<3>::new();
 
                     grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
                         println!(
@@ -1280,7 +1282,7 @@ mod tests {
 
                 #[test]
                 fn test_trominoes_general_solve() {
-                    let grid = Grid::new(3);
+                    let grid = Grid::<3>::new();
                     assert_eq![grid.solve().len(), 10];
                 }
             }
