@@ -595,21 +595,25 @@ impl GridTiling {
         let mut cur_slice_pos = slice_start;
         let mut cur_piece_id = piece_id;
 
-        if cur_slice_pos > 0 {
-            while let Some(prev_next_map) = self.slice_relation_stack[cur_slice_pos - 1]
+            // note that we map piece ids to global ids by a left/right position and a slice
+            // relation, which implies one of two options. as a matter of convention we always use
+            // the bottom-most id for the relation (i.e. we take the y of the first without a match
+            // instead of the x of the last with a match)
+
+            // while the current stack maps a previous id to the current id, go back
+            while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
                 .2
                 .iter()
                 .enumerate()
-                .find(|(prev_piece_id, prev_next_piece_id)| **prev_next_piece_id == cur_piece_id)
+                .find(|(cur_piece_x_id, cur_piece_y_id)| **cur_piece_y_id == cur_piece_id)
             {
                 cur_slice_pos = cur_slice_pos - 1;
-                cur_piece_id = prev_next_map.0 as u8;
+                cur_piece_id = cur_map.0 as u8;
 
                 if cur_slice_pos == 0 {
                     break;
                 }
             }
-        }
 
         if let Some(global_piece_map) = state
             .iter()
@@ -682,18 +686,22 @@ impl GridTiling {
                             }
                         }
                         2 => {
-                            // connect to top neighbor (if one exists)
-                            if cur_slice_pos > 0 {
+                            // connect to top neighbor (if one exists and is connected)
+                            if cur_slice_pos > 0
+                                && (cur_slice.2)[cur_slice.0.pos_to_id[cur_piece_pos] as usize]
+                                    == *cur_piece_id
+                            {
+                                println!("connecting current slice state id to previous slice state id");
                                 Some((
                                     cur_id,
                                     self.render_graph_backtrack_slice_piece_id(
                                         &mut state,
                                         cur_slice_pos - 1,
-                                        self.slice_relation_stack[cur_slice_pos - 1].1.pos_to_id
-                                            [cur_piece_pos],
+                                        cur_slice.0.pos_to_id[cur_piece_pos]
                                     ),
                                 ))
                             } else {
+                                println!("not connecting current slice state id to previous slice state id");
                                 None
                             }
                         }
@@ -720,12 +728,14 @@ impl GridTiling {
         (ret, state)
     }
 
-    fn render_color(&self, graph: &Vec<(u8, u8)>) -> Vec<u8> {
+    fn render_color(&self, graph: &Vec<(u8, u8)>, state: &Vec<(usize, u8, u8)>) -> Vec<u8> {
         // note graph coloring is an interesting problem but its outside the scope here. we have
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
-        AddWithCarry::new(0, 4, graph.iter().map(|x| x.0).max().unwrap() as usize + 1)
+
+        println!("rendering {:?} with color", graph);
+        AddWithCarry::new(0, 4, state.len())
             .find(|color| {
                 // verify that no two colors are connected by an edge
                 graph
@@ -737,8 +747,17 @@ impl GridTiling {
     }
 
     fn render(&self) {
+        println!("TILING");
+
+        println!(
+            "{:?}\t{}",
+            self.slice_relation_stack[0].0, self.slice_relation_stack[0].0
+        );
+        self.slice_relation_stack
+            .iter()
+            .for_each(|y| println!("{:?}\t{}", y.1, y.1));
         let mut graph = self.render_graph();
-        let color = self.render_color(&graph.0);
+        let color = self.render_color(&graph.0, &graph.1);
 
         println!("graph: {:?}", &graph);
         println!("color: {:?}", &color);
