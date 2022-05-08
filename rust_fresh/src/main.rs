@@ -2,13 +2,6 @@
 type GridLen = u8;
 
 type GridSliceStatePieceID = u8;
-//macro_rules! dbgwrap {
-//    ($($args:expr),*) => { println!($($args),*) }
-//}
-
-macro_rules! dbgwrap {
-    ($($args:expr),*) => {};
-}
 
 // helper stuff
 struct AddWithCarry<const LENGTH: usize> {
@@ -577,22 +570,31 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         // the bottom-most id for the relation (i.e. we take the y of the first without a match
         // instead of the x of the last with a match)
 
-        // while the current stack maps a previous id to the current id, go back
-        while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
-            .2
-            .into_iter()
-            .enumerate()
-            .find(|(_, cur_piece_y_id)| *cur_piece_y_id == cur_piece_id)
-        {
-            // note the canonical pieces map nothing from the previous and we start below them, so
-            // it is impossible to backtrack this high because nothing inverts to the canonical
-            // case
-            if cur_slice_pos == 0 {
-                break;
+        let (cur_slice_pos, cur_piece_id) = if cur_slice_pos == 0 {
+            // the base case is the top of the first relation, so we define unique ids only with
+            // left-right relations
+            (slice_start, piece_id)
+        } else {
+            // all other relations assume the *bottom* of the relation is the position (so we
+            // actually index 1..(n + 1) as the bottom of the 0..n relations)
+            let mut cur_slice_pos = slice_start - 1;
+            let mut cur_piece_id = piece_id;
+
+            // while the current stack maps a previous id to the current id, go back
+            while let Some(cur_map) = self.slice_relation_stack[cur_slice_pos]
+                .2
+                .into_iter()
+                .enumerate()
+                .find(|(_, cur_piece_y_id)| *cur_piece_y_id == cur_piece_id)
+            {
+                if cur_slice_pos == 0 {
+                    break;
+                }
+                cur_slice_pos = cur_slice_pos - 1;
+                cur_piece_id = cur_map.0 as u8;
             }
-            cur_slice_pos = cur_slice_pos - 1;
-            cur_piece_id = cur_map.0 as u8;
-        }
+            (cur_slice_pos + 1, cur_piece_id)
+        };
 
         if let Some(global_piece_map) = state
             .iter()
@@ -621,14 +623,16 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
 
         // note i need to insert a special case for the 0->1 mapping here
 
-        let mut connect_slice = |ret: &mut Vec<(u8, u8)>,
-                                 state: &mut Vec<(usize, u8, u8)>,
-                                 cur_slice_pos: usize,
-                                 cur_slice: GridSliceState<LENGTH>,
-                                 cur_piece_pos: usize,
-                                 cur_piece_id: &u8| {
+        let connect_slice = |ret: &mut Vec<(u8, u8)>,
+                             state: &mut Vec<(usize, u8, u8)>,
+                             cur_slice_pos: usize,
+                             cur_slice: GridSliceState<LENGTH>,
+                             cur_piece_pos: usize,
+                             cur_piece_id: &u8| {
             let cur_id =
                 self.render_graph_backtrack_slice_piece_id(state, cur_slice_pos, *cur_piece_id);
+
+            println!("backtrack {} {} -> {}", cur_slice_pos, cur_piece_id, cur_id);
 
             // note the number is 3 because of the number of non-down ways that a polyomino can
             // border another, not because of an edge case with the 3 case
@@ -667,19 +671,22 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                     }
                     2 => {
                         // connect to top neighbor (if one exists)
-                        if cur_slice_pos > 0 {
+                        let top_neighbor = if cur_slice_pos > 0 {
                             Some((
                                 cur_id,
                                 self.render_graph_backtrack_slice_piece_id(
                                     state,
                                     cur_slice_pos - 1,
-                                    self.slice_relation_stack[cur_slice_pos - 1].1.pos_to_id
+                                    self.slice_relation_stack[cur_slice_pos - 1].0.pos_to_id
                                         [cur_piece_pos],
                                 ),
                             ))
                         } else {
                             None
-                        }
+                        };
+
+                        println!("top neighbor connection: {:?}", &top_neighbor);
+                        top_neighbor
                     }
                     _ => unreachable!(),
                 };
@@ -700,31 +707,58 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
 
         let mut ret = Vec::new();
         let mut state = Vec::new();
+
+        self.slice_relation_stack[0]
+            .0
+            .pos_to_id
+            .iter()
+            .enumerate()
+            .for_each(|(cur_piece_pos, cur_piece_id)| {
+                connect_slice(
+                    &mut ret,
+                    &mut state,
+                    0,
+                    self.slice_relation_stack[0].0.clone(),
+                    cur_piece_pos,
+                    cur_piece_id,
+                );
+            });
+
         for (cur_slice_pos, cur_slice) in self.slice_relation_stack.iter().enumerate() {
             for (cur_piece_pos, cur_piece_id) in cur_slice.1.pos_to_id.iter().enumerate() {
                 connect_slice(
                     &mut ret,
                     &mut state,
-                    cur_slice_pos,
+                    cur_slice_pos + 1,
                     cur_slice.1.clone(),
                     cur_piece_pos,
                     cur_piece_id,
                 );
             }
         }
-        //ret.sort();
-        //ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
+
+        ret.sort();
+        ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
 
         (ret, state)
     }
 
-    fn render_color(&self, graph: &Vec<(u8, u8)>) -> [u8; LENGTH] {
+    fn render_color(&self, graph: &Vec<(u8, u8)>) -> [u8; 8] {
         // note graph coloring is an interesting problem but its outside the scope here. we have
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
 
-        AddWithCarry::<LENGTH>::new(0, LENGTH as u8)
+        // note for the nxn case, the number of n partitions is obviously n. however, because we
+        // can render slice states, and not all valid slice states are possible in a tiling of a
+        // square, this code needs to generalize to an arbitrary number of global piece ids, so we
+        // can't use a static length vector here. we brute force the coloring in a similar way
+        // (AddWithCarry) but we set the length to be the number of global ids total (the number of
+        // colors, the base, is still 4 because of the four-color theorem, but the native
+        // representation is a jump-table/function, so we need to scale with the size of the
+        // domain). 8 is a reasonably large number and i should find a better algorithm anyways...
+
+        AddWithCarry::<8>::new(0, LENGTH as u8)
             .find(|color| {
                 // verify that no two colors are connected by an edge
                 graph
@@ -755,9 +789,9 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             });
 
         let mut graph = self.render_graph();
+        println!("graph: {:?}", &graph);
         let color = self.render_color(&graph.0);
-
-        println!("graph: {:?}, color: {:?}", &graph, &color);
+        println!("color: {:?}", &color);
 
         // we always draw the very-top because we only draw the y in the loop
         let mut draw_line =
@@ -1231,6 +1265,8 @@ mod tests {
             let grid = Grid::<4>::new();
             // panic!("grid.slice_relation: {:#?}", &grid.slice_relation);
             // grid.slice_relation.iter().enumerate().for_each(|x| println!("{}:\n{}", x.0, x.1));
+
+            // the bottom row is never connected to the top row
             println!("{}:\n{}", 220, grid.slice_relation[220]);
             assert![false];
         }
