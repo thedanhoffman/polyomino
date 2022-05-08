@@ -632,8 +632,6 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             let cur_id =
                 self.render_graph_backtrack_slice_piece_id(state, cur_slice_pos, *cur_piece_id);
 
-            println!("backtrack {} {} -> {}", cur_slice_pos, cur_piece_id, cur_id);
-
             // note the number is 3 because of the number of non-down ways that a polyomino can
             // border another, not because of an edge case with the 3 case
 
@@ -671,7 +669,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                     }
                     2 => {
                         // connect to top neighbor (if one exists)
-                        let top_neighbor = if cur_slice_pos > 0 {
+                        if cur_slice_pos > 0 {
                             Some((
                                 cur_id,
                                 self.render_graph_backtrack_slice_piece_id(
@@ -683,10 +681,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                             ))
                         } else {
                             None
-                        };
-
-                        println!("top neighbor connection: {:?}", &top_neighbor);
-                        top_neighbor
+                        }
                     }
                     _ => unreachable!(),
                 };
@@ -788,9 +783,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             });
 
         let mut graph = self.render_graph();
-        println!("graph: {:?}", &graph);
         let color = self.render_color(&graph.0);
-        println!("color: {:?}", &color);
 
         // we always draw the very-top because we only draw the y in the loop
         let mut draw_line =
@@ -810,7 +803,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                             match color[global_id as usize] {
                                 0 => 4,
                                 1 => 1,
-                                2 => 3,
+                                2 => 5,
                                 3 => 2,
                                 _ => unreachable!(),
                             },
@@ -837,7 +830,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
     }
 
     fn render(&self) {
-        println!("RENDER {}", self.render_str());
+        println!("{}", self.render_str());
     }
 }
 
