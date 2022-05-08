@@ -774,7 +774,6 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         self.slice_relation_stack
             .iter()
             .enumerate()
-            .filter(|y| y.0 >= 1 && y.0 < self.slice_relation_stack.len() - 2)
             .for_each(|y| {
                 println!(
                     "{:?}\t{}\t{:?}",
@@ -829,7 +828,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                 ret = format![
                     "{}{}",
                     ret,
-                    draw_line(cur_slice_relation_pos, cur_slice_relation.1.clone())
+                    draw_line(cur_slice_relation_pos + 1, cur_slice_relation.1.clone())
                 ];
             },
         );
