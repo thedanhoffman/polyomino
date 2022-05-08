@@ -500,15 +500,31 @@ impl<const LENGTH: usize> GridSliceRelation<LENGTH> {
 
 impl<const LENGTH: usize> std::fmt::Display for GridSliceRelation<LENGTH> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // note we can't easily re-cycle the display for an individual slice state because we want
+        // to insert colors to make the piece mappings more obvious. these colors only have a
+        // locally unique coloring (i.e. we only compute edges created between the two slices and a
+        // slice between itself when coloring)
+
+        let mut tiling = GridTiling::new();
+        tiling.push((
+            self._func.0.clone(),
+            self._func.1.clone(),
+            self._piece_map.clone(),
+        ));
+        write!(f, "{}", tiling.render_str()).unwrap();
         write!(
             f,
-            "{} -> {}",
+            "{} -> {} ({:?}, flip: {})",
             {
                 let mut x = self._func.0.clone();
-                x.pos_to_id.reverse();
+                if self.flip {
+                    x.pos_to_id.reverse();
+                }
                 format!["{}", x]
             },
-            self._func.1
+            self._func.1,
+            self._piece_map,
+            self.flip
         )
         .unwrap();
         Ok(())
@@ -571,7 +587,9 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             // note the canonical pieces map nothing from the previous and we start below them, so
             // it is impossible to backtrack this high because nothing inverts to the canonical
             // case
-            assert![cur_slice_pos != 0 && cur_slice_pos != 1];
+            if cur_slice_pos == 0 {
+                break;
+            }
             cur_slice_pos = cur_slice_pos - 1;
             cur_piece_id = cur_map.0 as u8;
         }
@@ -601,91 +619,101 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         //
         // the graph is represented as an adjacency list
 
-        let mut ret = Vec::new();
-        let mut state = Vec::new();
-        for (cur_slice_pos, cur_slice) in self
-            .slice_relation_stack
-            .iter()
-            .enumerate()
-            .filter(|x| x.0 >= 2 && x.0 <= self.slice_relation_stack.len() - 3)
-        {
-            for (cur_piece_pos, cur_piece_id) in cur_slice.1.pos_to_id.iter().enumerate() {
-                let cur_id = self.render_graph_backtrack_slice_piece_id(
-                    &mut state,
-                    cur_slice_pos,
-                    *cur_piece_id,
-                );
+        // note i need to insert a special case for the 0->1 mapping here
 
-                // note the number is 3 because of the number of non-down ways that a polyomino can
-                // border another, not because of an edge case with the 3 case
+        let mut connect_slice = |ret: &mut Vec<(u8, u8)>,
+                                 state: &mut Vec<(usize, u8, u8)>,
+                                 cur_slice_pos: usize,
+                                 cur_slice: GridSliceState<LENGTH>,
+                                 cur_piece_pos: usize,
+                                 cur_piece_id: &u8| {
+            let cur_id =
+                self.render_graph_backtrack_slice_piece_id(state, cur_slice_pos, *cur_piece_id);
 
-                // BACKWARDS TRAVERSALS NEED TO TAKE FLIPS INTO ACCOUNT!!!
-                ret.extend((0..3).flat_map(|x| {
-                    let pair = match x {
-                        0 => {
-                            // connect to left neighbor (if one exists)
-                            if cur_piece_pos > 0 {
-                                Some((
-                                    cur_id,
-                                    self.render_graph_backtrack_slice_piece_id(
-                                        &mut state,
-                                        cur_slice_pos,
-                                        cur_slice.1.pos_to_id[cur_piece_pos - 1],
-                                    ),
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                        1 => {
-                            // connect to right neighbor (if one exists)
-                            if cur_piece_pos < LENGTH - 1 {
-                                Some((
-                                    cur_id,
-                                    self.render_graph_backtrack_slice_piece_id(
-                                        &mut state,
-                                        cur_slice_pos,
-                                        cur_slice.1.pos_to_id[cur_piece_pos + 1],
-                                    ),
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                        2 => {
-                            // connect to top neighbor (if one exists)
-                            if cur_slice_pos > 0 {
-                                Some((
-                                    cur_id,
-                                    self.render_graph_backtrack_slice_piece_id(
-                                        &mut state,
-                                        cur_slice_pos - 1,
-                                        cur_slice.0.pos_to_id[cur_piece_pos],
-                                    ),
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => unreachable!(),
-                    };
+            // note the number is 3 because of the number of non-down ways that a polyomino can
+            // border another, not because of an edge case with the 3 case
 
-                    if let Some(edge) = pair {
-                        if edge.0 > edge.1 {
-                            Some((edge.0, edge.1))
-                        } else if edge.0 < edge.1 {
-                            Some((edge.1, edge.0))
+            ret.extend((0..3).flat_map(|x| {
+                let pair = match x {
+                    0 => {
+                        // connect to left neighbor (if one exists)
+                        if cur_piece_pos > 0 {
+                            Some((
+                                cur_id,
+                                self.render_graph_backtrack_slice_piece_id(
+                                    state,
+                                    cur_slice_pos,
+                                    cur_slice.pos_to_id[cur_piece_pos - 1],
+                                ),
+                            ))
                         } else {
                             None
                         }
+                    }
+                    1 => {
+                        // connect to right neighbor (if one exists)
+                        if cur_piece_pos < LENGTH - 1 {
+                            Some((
+                                cur_id,
+                                self.render_graph_backtrack_slice_piece_id(
+                                    state,
+                                    cur_slice_pos,
+                                    cur_slice.pos_to_id[cur_piece_pos + 1],
+                                ),
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                    2 => {
+                        // connect to top neighbor (if one exists)
+                        if cur_slice_pos > 0 {
+                            Some((
+                                cur_id,
+                                self.render_graph_backtrack_slice_piece_id(
+                                    state,
+                                    cur_slice_pos - 1,
+                                    self.slice_relation_stack[cur_slice_pos - 1].1.pos_to_id
+                                        [cur_piece_pos],
+                                ),
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+
+                if let Some(edge) = pair {
+                    if edge.0 > edge.1 {
+                        Some((edge.0, edge.1))
+                    } else if edge.0 < edge.1 {
+                        Some((edge.1, edge.0))
                     } else {
                         None
                     }
-                }));
+                } else {
+                    None
+                }
+            }));
+        };
+
+        let mut ret = Vec::new();
+        let mut state = Vec::new();
+        for (cur_slice_pos, cur_slice) in self.slice_relation_stack.iter().enumerate() {
+            for (cur_piece_pos, cur_piece_id) in cur_slice.1.pos_to_id.iter().enumerate() {
+                connect_slice(
+                    &mut ret,
+                    &mut state,
+                    cur_slice_pos,
+                    cur_slice.1.clone(),
+                    cur_piece_pos,
+                    cur_piece_id,
+                );
             }
         }
-        ret.sort();
-        ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
+        //ret.sort();
+        //ret.dedup_by(|a, b| (a.0 == b.0 && a.1 == b.1));
 
         (ret, state)
     }
@@ -695,8 +723,6 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
         // colorings and return the first
-
-        println!("graph: {:?}", graph);
 
         AddWithCarry::<LENGTH>::new(0, LENGTH as u8)
             .find(|color| {
@@ -709,48 +735,76 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             .val
     }
 
-    fn render(&self) {
+    fn render_str(&self) -> String {
+        let mut ret = String::new();
         self.slice_relation_stack
             .iter()
             .enumerate()
             .filter(|y| y.0 >= 1 && y.0 < self.slice_relation_stack.len() - 2)
-            .for_each(|y| println!("{:?}\t{}\t{:?}", y.1.1, y.1.1, if y.0 == 1 { vec![] } else { y.1.2.clone().to_vec() }));
- 
+            .for_each(|y| {
+                println!(
+                    "{:?}\t{}\t{:?}",
+                    y.1 .1,
+                    y.1 .1,
+                    if y.0 == 1 {
+                        vec![]
+                    } else {
+                        y.1 .2.clone().to_vec()
+                    }
+                )
+            });
+
         let mut graph = self.render_graph();
         let color = self.render_color(&graph.0);
 
+        println!("graph: {:?}, color: {:?}", &graph, &color);
+
+        // we always draw the very-top because we only draw the y in the loop
+        let mut draw_line =
+            |cur_slice_relation_pos: usize, cur_slice: GridSliceState<LENGTH>| -> String {
+                let mut ret = String::new();
+                cur_slice.pos_to_id.iter().for_each(|cur_piece_id| {
+                    let global_id = self.render_graph_backtrack_slice_piece_id(
+                        &mut graph.1,
+                        cur_slice_relation_pos,
+                        *cur_piece_id,
+                    );
+                    ret = format![
+                        "{}{}",
+                        ret,
+                        format![
+                            "\x1b[3{}m{}\x1b[39;49m",
+                            match color[global_id as usize] {
+                                0 => 4,
+                                1 => 1,
+                                2 => 3,
+                                3 => 2,
+                                _ => unreachable!(),
+                            },
+                            global_id
+                        ]
+                    ];
+                });
+                ret = format!["{}\n", ret];
+                ret
+            };
+
+        ret = draw_line(0, self.slice_relation_stack[0].0.clone());
         self.slice_relation_stack.iter().enumerate().for_each(
             |(cur_slice_relation_pos, cur_slice_relation)| {
-                if cur_slice_relation_pos >= 1
-                    && cur_slice_relation_pos < self.slice_relation_stack.len() - 2
-                {
-                    cur_slice_relation
-                        .1
-                        .pos_to_id
-                        .iter()
-                        .for_each(|cur_piece_id| {
-                            let global_id = self.render_graph_backtrack_slice_piece_id(
-                                &mut graph.1,
-                                cur_slice_relation_pos,
-                                *cur_piece_id,
-                            );
-
-                            print!(
-                                "\x1b[3{}m{}\x1b[39;49m",
-                                match color[global_id as usize] {
-                                    0 => 4,
-                                    1 => 1,
-                                    2 => 3,
-                                    3 => 2,
-                                    _ => unreachable!(),
-                                },
-                                global_id
-                            );
-                        });
-                    println!("");
-                }
+                ret = format![
+                    "{}{}",
+                    ret,
+                    draw_line(cur_slice_relation_pos, cur_slice_relation.1.clone())
+                ];
             },
-        )
+        );
+
+        ret
+    }
+
+    fn render(&self) {
+        println!("RENDER {}", self.render_str());
     }
 }
 
@@ -805,12 +859,12 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                     AddWithCarry::<LENGTH>::new(0, LENGTH as u8).flat_map(move |piece_map| {
                         if GridSliceRelation::has_valid_x_y_piece_map(x, y, &piece_map.val) {
                             Some((0..2).flat_map(move |flip| {
-                                if GridSliceRelation::has_valid_set(x, y, &piece_map.val, flip == 0)
+                                if GridSliceRelation::has_valid_set(x, y, &piece_map.val, flip != 0)
                                 {
                                     Some(GridSliceRelation {
                                         _func: (x.clone(), y.clone()),
                                         _piece_map: piece_map.val.clone(),
-                                        flip: flip == 0,
+                                        flip: flip != 0,
                                     })
                                 } else {
                                     None
@@ -920,12 +974,6 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         println!("tilings (length = {})", tiling.len());
         tiling.iter().enumerate().for_each(|x| {
             println!("TILING {}", x.0);
-
-            println!(
-                "{:?}\t{}",
-                x.1.slice_relation_stack[0].0, x.1.slice_relation_stack[0].0
-            );
-
             x.1.render();
         });
 
@@ -954,16 +1002,16 @@ fn main() {
                 }
                 _ => unreachable!(),
             };
-        },
+        }
         "scratch" => {
             let grid = Grid::<4>::new().solve();
 
             println!("\n\n");
             println!("THE ONLY ONES I CARE ABOUT");
-            [
-                131, 96, 71, 69, 68, 65, 64, 63, 58
-            ].into_iter().for_each(|x| grid[x].render());
-        },
+            [131, 96, 71, 69, 68, 65, 64, 63, 58]
+                .into_iter()
+                .for_each(|x| grid[x].render());
+        }
         _ => unreachable!(),
     }
 }
@@ -1177,6 +1225,15 @@ mod tests {
 
     mod tetrominoes {
         use super::*;
+
+        #[test]
+        fn test_tetrominoes_slice_relation() {
+            let grid = Grid::<4>::new();
+            // panic!("grid.slice_relation: {:#?}", &grid.slice_relation);
+            // grid.slice_relation.iter().enumerate().for_each(|x| println!("{}:\n{}", x.0, x.1));
+            println!("{}:\n{}", 220, grid.slice_relation[220]);
+            assert![false];
+        }
 
         #[test]
         fn test_tetrominoes_solve() {
