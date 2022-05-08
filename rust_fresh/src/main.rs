@@ -568,12 +568,12 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             .enumerate()
             .find(|(_, cur_piece_y_id)| *cur_piece_y_id == cur_piece_id)
         {
+            // note the canonical pieces map nothing from the previous and we start below them, so
+            // it is impossible to backtrack this high because nothing inverts to the canonical
+            // case
+            assert![cur_slice_pos != 0 && cur_slice_pos != 1];
             cur_slice_pos = cur_slice_pos - 1;
             cur_piece_id = cur_map.0 as u8;
-
-            if cur_slice_pos == 0 {
-                break;
-            }
         }
 
         if let Some(global_piece_map) = state
@@ -619,6 +619,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                 // note the number is 3 because of the number of non-down ways that a polyomino can
                 // border another, not because of an edge case with the 3 case
 
+                // BACKWARDS TRAVERSALS NEED TO TAKE FLIPS INTO ACCOUNT!!!
                 ret.extend((0..3).flat_map(|x| {
                     let pair = match x {
                         0 => {
@@ -638,7 +639,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                         }
                         1 => {
                             // connect to right neighbor (if one exists)
-                            if cur_piece_pos < cur_slice.1.pos_to_id.len() - 1 {
+                            if cur_piece_pos < LENGTH - 1 {
                                 Some((
                                     cur_id,
                                     self.render_graph_backtrack_slice_piece_id(
@@ -689,7 +690,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         (ret, state)
     }
 
-    fn render_color(&self, graph: &Vec<(u8, u8)>, state: &Vec<(usize, u8, u8)>) -> [u8; LENGTH] {
+    fn render_color(&self, graph: &Vec<(u8, u8)>) -> [u8; LENGTH] {
         // note graph coloring is an interesting problem but its outside the scope here. we have
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
@@ -709,15 +710,14 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
     }
 
     fn render(&self) {
-        println!(
-            "{:?}\t{}",
-            self.slice_relation_stack[0].0, self.slice_relation_stack[0].0
-        );
         self.slice_relation_stack
             .iter()
-            .for_each(|y| println!("{:?}\t{}", y.1, y.1));
+            .enumerate()
+            .filter(|y| y.0 >= 1 && y.0 < self.slice_relation_stack.len() - 2)
+            .for_each(|y| println!("{:?}\t{}\t{:?}", y.1.1, y.1.1, if y.0 == 1 { vec![] } else { y.1.2.clone().to_vec() }));
+ 
         let mut graph = self.render_graph();
-        let color = self.render_color(&graph.0, &graph.1);
+        let color = self.render_color(&graph.0);
 
         self.slice_relation_stack.iter().enumerate().for_each(
             |(cur_slice_relation_pos, cur_slice_relation)| {
@@ -736,7 +736,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                             );
 
                             print!(
-                                "\x1b[3{}m{}{}\x1b[39;49m",
+                                "\x1b[3{}m{}\x1b[39;49m",
                                 match color[global_id as usize] {
                                     0 => 4,
                                     1 => 1,
@@ -744,9 +744,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                                     3 => 2,
                                     _ => unreachable!(),
                                 },
-                                global_id,
-                                global_id //char::from_u32(0x00002588).unwrap(),
-                                          //char::from_u32(0x00002588).unwrap(),
+                                global_id
                             );
                         });
                     println!("");
@@ -807,7 +805,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                     AddWithCarry::<LENGTH>::new(0, LENGTH as u8).flat_map(move |piece_map| {
                         if GridSliceRelation::has_valid_x_y_piece_map(x, y, &piece_map.val) {
                             Some((0..2).flat_map(move |flip| {
-                                if GridSliceRelation::has_valid_set(x, y, &piece_map.val, flip == 0) {
+                                if GridSliceRelation::has_valid_set(x, y, &piece_map.val, flip == 0)
+                                {
                                     Some(GridSliceRelation {
                                         _func: (x.clone(), y.clone()),
                                         _piece_map: piece_map.val.clone(),
@@ -822,7 +821,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                         }
                     })
                 })
-            }).flatten()
+            })
+            .flatten()
             .collect::<Vec<_>>()
     }
 
@@ -935,14 +935,6 @@ impl<const LENGTH: usize> Grid<LENGTH> {
 
 fn main() {
     match std::env::args().nth(1).unwrap().as_str() {
-        "ss" => {
-            let grid = Grid::<3>::new();
-            grid.slice_state.iter().for_each(|x| println!("{}", x))
-        }
-        "sr" => {
-            let grid = Grid::<3>::new();
-            grid.slice_relation.iter().for_each(|x| println!("{}", x))
-        }
         "render" => {
             match std::env::args().nth(2).unwrap().parse::<u8>().unwrap() {
                 2 => {
@@ -962,7 +954,16 @@ fn main() {
                 }
                 _ => unreachable!(),
             };
-        }
+        },
+        "scratch" => {
+            let grid = Grid::<4>::new().solve();
+
+            println!("\n\n");
+            println!("THE ONLY ONES I CARE ABOUT");
+            [
+                131, 96, 71, 69, 68, 65, 64, 63, 58
+            ].into_iter().for_each(|x| grid[x].render());
+        },
         _ => unreachable!(),
     }
 }
@@ -971,40 +972,6 @@ fn main() {
 mod tests {
     use super::*;
     use itertools::Itertools;
-
-    mod tetrominoes {
-        use super::*;
-
-        #[test]
-        fn test_tetrominoes_slice_state() {
-            let grid = Grid::<4>::new();
-            grid.slice_state
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| println!("{}: {}", i, x));
-
-            // note the paper assumes that A = A' = A'' in the 3 case, and i'm generalizing the
-            // trend to any slice state with all pieces of length 4 are equal (i.e. any state
-            // whose next state is flat)
-
-            let slice_state_len = grid.slice_state.len();
-            let slice_state_equiv_corr_len = grid
-                .slice_state
-                .iter()
-                .filter(|x| x.id_to_len.iter().any(|y| *y != 4 && *y != 0))
-                .count()
-                + 1;
-            let slice_relation_len = grid.slice_relation.len();
-            let grid_solve_len = grid.solve();
-
-            dbg![(
-                slice_state_len,
-                slice_state_equiv_corr_len,
-                slice_relation_len,
-                grid_solve_len
-            )];
-        }
-    }
 
     mod trominoes {
         use super::*;
@@ -1081,167 +1048,140 @@ mod tests {
             }
         }
 
-        mod unit {
+        mod slice_state {
             use super::*;
 
-            mod slice_state {
-                use super::*;
+            fn get_reference() -> Vec<GridSliceState<3>> {
+                // note: the paper says seven slice states because it has A = A' = A''
+                vec![
+                    GridSliceState::new(&[0, 0, 3], &[2, 2, 2]).unwrap(), // A
+                    GridSliceState::new(&[0, 3, 3], &[1, 2, 2]).unwrap(), // A'
+                    GridSliceState::new(&[3, 3, 3], &[0, 1, 2]).unwrap(), // A''
+                    GridSliceState::new(&[1, 2, 3], &[0, 1, 2]).unwrap(), // B
+                    GridSliceState::new(&[1, 2, 3], &[1, 0, 2]).unwrap(), // C
+                    GridSliceState::new(&[1, 2, 3], &[0, 2, 1]).unwrap(), // D
+                    GridSliceState::new(&[2, 2, 2], &[0, 1, 2]).unwrap(), // E
+                    GridSliceState::new(&[1, 1, 1], &[0, 1, 2]).unwrap(), // F
+                    GridSliceState::new(&[0, 1, 2], &[1, 2, 2]).unwrap(), // G
+                ]
+            }
 
-                #[test]
-                fn test_trominoes_unit_slice_state_not_isomorphic() {
-                    assert_eq![
-                        (0..3)
-                            .permutations(3)
-                            .map(|x| {
-                                GridSliceState::<3>::pass_not_isomorphic(
-                                    &[3, 3, 3],
-                                    &[x[0], x[1], x[2]],
-                                ) as usize
-                            })
-                            .sum::<usize>(),
-                        1
-                    ];
-                }
+            #[test]
+            fn test_trominoes_slice_state_reference() {
+                get_reference();
+            }
+
+            #[test]
+            fn test_trominoes_slice_state() {
+                let answer = get_reference();
+                let grid = Grid::<3>::new();
+
+                grid.slice_state
+                    .iter()
+                    .for_each(|x| println!("{:?}\t{}", x, x));
+
+                answer.iter().for_each(|x| {
+                    if !grid.slice_state.iter().any(|y| x == y) {
+                        panic!("cannot find {:?} {} in results", x, x);
+                    }
+                });
+
+                grid.slice_state.iter().for_each(|x| {
+                    if !answer.iter().any(|y| x == y) {
+                        panic!("cannot find {:?} {} in answers", x, x);
+                    }
+                });
+
+                assert_eq![grid.slice_state.len(), answer.len()];
             }
         }
 
-        mod general {
+        mod slice_relation {
             use super::*;
 
-            mod slice_state {
-                use super::*;
+            fn get_reference() -> Vec<GridSliceRelation<3>> {
+                let slice_state = Grid::<3>::new_slice_state();
+                let find = |a: &'static str| -> &GridSliceState<3> {
+                    slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
+                };
 
-                #[test]
-                fn test_trominoes_general_slice_state_basic() {
-                    let a = GridSliceState::new(&[0, 0, 3], &[2, 2, 2]).unwrap();
-                    println!("{}", &a);
-
-                    assert![a.symmetric()];
-                }
-
-                fn get_reference() -> Vec<GridSliceState<3>> {
-                    // note: the paper says seven slice states because it has A = A' = A''
-                    vec![
-                        GridSliceState::new(&[0, 0, 3], &[2, 2, 2]).unwrap(), // A
-                        GridSliceState::new(&[0, 3, 3], &[1, 2, 2]).unwrap(), // A'
-                        GridSliceState::new(&[3, 3, 3], &[0, 1, 2]).unwrap(), // A''
-                        GridSliceState::new(&[1, 2, 3], &[0, 1, 2]).unwrap(), // B
-                        GridSliceState::new(&[1, 2, 3], &[1, 0, 2]).unwrap(), // C
-                        GridSliceState::new(&[1, 2, 3], &[0, 2, 1]).unwrap(), // D
-                        GridSliceState::new(&[2, 2, 2], &[0, 1, 2]).unwrap(), // E
-                        GridSliceState::new(&[1, 1, 1], &[0, 1, 2]).unwrap(), // F
-                        GridSliceState::new(&[0, 1, 2], &[1, 2, 2]).unwrap(), // G
-                    ]
-                }
-
-                #[test]
-                fn test_trominoes_general_slice_state_reference() {
-                    get_reference();
-                }
-
-                #[test]
-                fn test_trominoes_general_slice_state() {
-                    let answer = get_reference();
-                    let grid = Grid::<3>::new();
-
-                    grid.slice_state
-                        .iter()
-                        .for_each(|x| println!("{:?}\t{}", x, x));
-
-                    answer.iter().for_each(|x| {
-                        if !grid.slice_state.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in results", x, x);
-                        }
-                    });
-
-                    grid.slice_state.iter().for_each(|x| {
-                        if !answer.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in answers", x, x);
-                        }
-                    });
-
-                    assert_eq![grid.slice_state.len(), answer.len()];
-                }
+                [
+                    ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", [0, 1, 2], false),
+                    ("| 1 || 2    2 |", "| 1 || 3 || 2 |", [3, 1, 2], true),
+                    ("| 1 || 2    2 |", "| 2 || 1 || 3 |", [3, 1, 2], false),
+                    ("| 1 || 2    2 |", "| 3 || 3    3 |", [3, 2, 1], true),
+                    ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", [0, 1, 2], false),
+                    ("| 3    3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                    ("| 3    3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                    ("| 3    3    3 |", "| 3    3    3 |", [3, 3, 3], false),
+                    ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", [1, 2, 3], false),
+                    ("| 1 || 3 || 2 |", "| 3 || 3    3 |", [2, 1, 3], true),
+                    ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", [1, 2, 3], true),
+                    ("| 2 || 1 || 3 |", "| 3 || 3    3 |", [2, 1, 3], false),
+                    ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", [1, 2, 3], true),
+                    ("| 3 || 3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                    ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                    ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], true),
+                    ("| 3 || 3    3 |", "| 3    3    3 |", [3, 3, 3], false),
+                    ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
+                    ("| 3 || 3 || 3 |", "| 1 || 2    2 |", [3, 3, 3], false),
+                    ("| 3 || 3 || 3 |", "| 3    3    3 |", [3, 3, 3], false),
+                ]
+                .iter()
+                .map(|x| {
+                    let ret = GridSliceRelation::new(3, find(x.0), find(x.1), &x.2, x.3).unwrap();
+                    ret
+                })
+                .collect::<Vec<_>>()
             }
 
-            mod slice_relation {
-                use super::*;
-
-                fn get_reference() -> Vec<GridSliceRelation<3>> {
-                    let slice_state = Grid::<3>::new_slice_state();
-                    let find = |a: &'static str| -> &GridSliceState<3> {
-                        slice_state.iter().find(|x| format!["{}", x] == a).unwrap()
-                    };
-
-                    [
-                        ("| 1 || 1 || 1 |", "| 2 || 2 || 2 |", [0, 1, 2], false),
-                        ("| 1 || 2    2 |", "| 1 || 3 || 2 |", [3, 1, 2], true),
-                        ("| 1 || 2    2 |", "| 2 || 1 || 3 |", [3, 1, 2], false),
-                        ("| 1 || 2    2 |", "| 3 || 3    3 |", [3, 2, 1], true),
-                        ("| 2 || 2 || 2 |", "| 3 || 3 || 3 |", [0, 1, 2], false),
-                        ("| 3    3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
-                        ("| 3    3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
-                        ("| 3    3    3 |", "| 3    3    3 |", [3, 3, 3], false),
-                        ("| 1 || 3 || 2 |", "| 2 || 1 || 3 |", [1, 2, 3], false),
-                        ("| 1 || 3 || 2 |", "| 3 || 3    3 |", [2, 1, 3], true),
-                        ("| 2 || 1 || 3 |", "| 1 || 2 || 3 |", [1, 2, 3], true),
-                        ("| 2 || 1 || 3 |", "| 3 || 3    3 |", [2, 1, 3], false),
-                        ("| 1 || 2 || 3 |", "| 1 || 3 || 2 |", [1, 2, 3], true),
-                        ("| 3 || 3    3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
-                        ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], false),
-                        ("| 3 || 3    3 |", "| 1 || 2    2 |", [3, 3, 3], true),
-                        ("| 3 || 3    3 |", "| 3    3    3 |", [3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 1 || 1 || 1 |", [3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 1 || 2    2 |", [3, 3, 3], false),
-                        ("| 3 || 3 || 3 |", "| 3    3    3 |", [3, 3, 3], false),
-                    ]
-                    .iter()
-                    .map(|x| {
-                        let ret =
-                            GridSliceRelation::new(3, find(x.0), find(x.1), &x.2, x.3).unwrap();
-                        ret
-                    })
-                    .collect::<Vec<_>>()
-                }
-
-                #[test]
-                fn test_trominoes_general_slice_relation_reference() {
-                    get_reference();
-                }
-                #[test]
-                fn test_trominoes_general_slice_relation() {
-                    let grid = Grid::<3>::new();
-
-                    grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
-                        println!(
-                            "{}: {} -> {} with piece_map {:?} and flip {}",
-                            i, x._func.0, x._func.1, x._piece_map, x.flip
-                        );
-                    });
-
-                    let answers = get_reference();
-                    answers.iter().for_each(|x| {
-                        if !grid.slice_relation.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in slice_relation", x, x);
-                        }
-                    });
-
-                    grid.slice_relation.iter().for_each(|x| {
-                        if !answers.iter().any(|y| x == y) {
-                            panic!("cannot find {:?} {} in answers", x, x)
-                        }
-                    });
-                }
+            #[test]
+            fn test_trominoes_slice_relation_reference() {
+                get_reference();
             }
-            mod solve {
-                use super::*;
+            #[test]
+            fn test_trominoes_slice_relation() {
+                let grid = Grid::<3>::new();
 
-                #[test]
-                fn test_trominoes_general_solve() {
-                    let grid = Grid::<3>::new();
-                    assert_eq![grid.solve().len(), 10];
-                }
+                grid.slice_relation.iter().enumerate().for_each(|(i, x)| {
+                    println!(
+                        "{}: {} -> {} with piece_map {:?} and flip {}",
+                        i, x._func.0, x._func.1, x._piece_map, x.flip
+                    );
+                });
+
+                let answers = get_reference();
+                answers.iter().for_each(|x| {
+                    if !grid.slice_relation.iter().any(|y| x == y) {
+                        panic!("cannot find {:?} {} in slice_relation", x, x);
+                    }
+                });
+
+                grid.slice_relation.iter().for_each(|x| {
+                    if !answers.iter().any(|y| x == y) {
+                        panic!("cannot find {:?} {} in answers", x, x)
+                    }
+                });
             }
+        }
+        mod solve {
+            use super::*;
+
+            #[test]
+            fn test_trominoes_solve() {
+                let grid = Grid::<3>::new();
+                assert_eq![grid.solve().len(), 10];
+            }
+        }
+    }
+
+    mod tetrominoes {
+        use super::*;
+
+        #[test]
+        fn test_tetrominoes_solve() {
+            let grid = Grid::<4>::new();
+            assert_eq![grid.solve().len(), 115]; // note im unsure whether this number is correct
         }
     }
 }
