@@ -562,8 +562,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         piece_id: u8,
     ) -> u8 {
         // keep backtracking via piece_map until nothing maps back to the piece
-        let mut cur_slice_pos = slice_start;
-        let mut cur_piece_id = piece_id;
+        let cur_slice_pos = slice_start;
 
         // note that we map piece ids to global ids by a left/right position and a slice
         // relation, which implies one of two options. as a matter of convention we always use
@@ -764,69 +763,59 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
             .val
     }
 
-    fn render_str(&self) -> String {
-        let mut ret = String::new();
-        self.slice_relation_stack
-            .iter()
-            .enumerate()
-            .for_each(|y| {
-                println!(
-                    "{:?}\t{}\t{:?}",
-                    y.1 .1,
-                    y.1 .1,
-                    if y.0 == 1 {
-                        vec![]
-                    } else {
-                        y.1 .2.clone().to_vec()
-                    }
-                )
-            });
-
+    fn render_map(&self) -> Vec<Vec<(u8, u8)>> {
         let mut graph = self.render_graph();
         let color = self.render_color(&graph.0);
 
-        // we always draw the very-top because we only draw the y in the loop
-        let mut draw_line =
-            |cur_slice_relation_pos: usize, cur_slice: GridSliceState<LENGTH>| -> String {
-                let mut ret = String::new();
-                cur_slice.pos_to_id.iter().for_each(|cur_piece_id| {
+        let mut map_line = |cur_slice_relation_pos: usize,
+                            cur_slice: GridSliceState<LENGTH>|
+         -> Vec<(u8, u8)> {
+            cur_slice
+                .pos_to_id
+                .iter()
+                .map(|cur_piece_id| {
                     let global_id = self.render_graph_backtrack_slice_piece_id(
                         &mut graph.1,
                         cur_slice_relation_pos,
                         *cur_piece_id,
                     );
-                    ret = format![
-                        "{}{}",
-                        ret,
-                        format![
-                            "\x1b[3{}m{}\x1b[39;49m",
-                            match color[global_id as usize] {
-                                0 => 4,
-                                1 => 1,
-                                2 => 5,
-                                3 => 2,
-                                _ => unreachable!(),
-                            },
-                            global_id
-                        ]
-                    ];
-                });
-                ret = format!["{}\n", ret];
-                ret
-            };
+                    (global_id, color[global_id as usize])
+                })
+                .collect::<Vec<_>>()
+        };
 
-        ret = draw_line(0, self.slice_relation_stack[0].0.clone());
+        let mut ret = Vec::new();
+        ret.push(map_line(0, self.slice_relation_stack[0].0.clone()));
         self.slice_relation_stack.iter().enumerate().for_each(
             |(cur_slice_relation_pos, cur_slice_relation)| {
-                ret = format![
-                    "{}{}",
-                    ret,
-                    draw_line(cur_slice_relation_pos + 1, cur_slice_relation.1.clone())
-                ];
+                ret.push(map_line(
+                    cur_slice_relation_pos + 1,
+                    cur_slice_relation.1.clone(),
+                ));
             },
         );
 
         ret
+    }
+
+    fn render_str(&self) -> String {
+        let map = self.render_map();
+
+        map.iter().map(|line| {
+            line.iter().map(|val| {
+                format![
+                    "\x1b[3{}m{}\x1b[39;49m",
+                    match val.1 {
+                        0 => 4,
+                        1 => 1,
+                        2 => 5,
+                        3 => 2,
+                        _ => unreachable!(),
+                    },
+                    val.0
+                ]
+            }).fold(String::new(), |a, b| format!["{}{}", a, b])
+        }).fold(String::new(), |a, b| format!["{}{}\n", a, b])
     }
 
     fn render(&self) {
@@ -1045,7 +1034,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use itertools::Itertools;
 
     mod trominoes {
         use super::*;
@@ -1267,6 +1255,99 @@ mod tests {
         fn test_tetrominoes_solve() {
             let grid = Grid::<4>::new();
             assert_eq![grid.solve().len(), 115]; // note im unsure whether this number is correct
+        }
+    }
+
+    mod general {
+        use super::*;
+
+        fn test_general_connected<const LENGTH: usize>() {
+            // verify that each ID creates a singular connected region (this currently fails
+            // because of the render code,
+            let grid = Grid::<LENGTH>::new();
+
+            assert![grid.solve().iter().all(|tiling| {
+                let render_str = tiling.render_str();
+                let render_map = tiling.render_map();
+                println!("render_str: {:?}", &render_str);
+                println!("render_map: {:?}", &render_map);
+
+                // note we check whether a configuration is connected by calculating a set of
+                // "feasible regions" by recognizing that an area cannot exist beyond the exterior
+                // of any given edge (unless, of course, another exterior cancels it with an
+                // interior on the other side). the following is a linear time algorithm to verify
+                // that, given an area (in this case, LENGTH) and a set of pieces, that all pieces
+                // are connected together
+                //
+                // note "feasible area" is a bit of a misnomer. although this phrase is borrowed
+                // from linear programming, we don't construct it as the intersection/union of
+                // half planes, but instead apply it specifically to the region orthogonal to the
+                // edge extending from the exterior inwards. it should be obvious why half planes
+                // will not work
+
+                // note we do this because rust's 'move' with a closure moves *all* variables
+                // referenced. this layer of indirection forces the move to be moving a reference,
+                // which is de-facto a pass-by-reference
+                let render_map = &render_map;
+
+                let mut feas_reg = render_map.iter().enumerate().map(move |(y, row)| row.iter().enumerate().map(move |(x, val)| {
+                    (0..4).filter_map(move |dir| {
+                        match dir {
+                            0 => if y < render_map.len() - 1 && render_map[y+1][x].0 != val.0 {
+                                Some((x, y, 'U'))
+                            } else {
+                                None
+                            },
+                            1 => if y > 0 && render_map[y-1][x].0 != val.0 {
+                                Some((x, y, 'D'))
+                            } else {
+                                None
+                            },
+                            2 => if x < render_map[y].len() - 1 && render_map[y][x+1].0 != val.0 {
+                                Some((x, y, 'R'))
+                            } else {
+                                None
+                            },
+                            3 => if x > 0 && render_map[y][x-1].0 != val.0 {
+                                Some((x, y, 'L'))
+                            } else {
+                                None
+                            },
+                            _ => unreachable!()
+                        }
+                    })
+                })).flatten().flatten().collect::<Vec<_>>();
+
+                // note we effectively "integrate" across the difference between the top and the
+                // bottom to find the area. there are some points to take into account here
+                //   1. its perfectly valid for the vertical-line test to fail *so long as the
+                //      interiors of the pieces are connected in some way*
+                //   2. we can bail if there exists an interval on x s.t. the area is zero but the
+                //      area computed so far isn't complete
+                // it may be possible to apply sweepline et. al algorithms to this, but we would
+                // need a drastically different representation of the underlying data (and,
+                // considering this is a unit test to verify correctness, i operate on an
+                // optimize-as-needed basis)
+                
+                (0..LENGTH).iter().scan(0, |state, x| {
+                
+                });
+                panic!("feas_reg: {:#?}", &feas_reg);
+                todo!()
+            })];
+        }
+
+        #[test]
+        fn test_general_connected_2() {
+            test_general_connected::<2>();
+        }
+        #[test]
+        fn test_general_connected_3() {
+            test_general_connected::<3>();
+        }
+        #[test]
+        fn test_general_connected_4() {
+            test_general_connected::<4>();
         }
     }
 }
