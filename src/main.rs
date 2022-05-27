@@ -767,22 +767,21 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         let mut graph = self.render_graph();
         let color = self.render_color(&graph.0);
 
-        let mut map_line = |cur_slice_relation_pos: usize,
-                            cur_slice: GridSliceState<LENGTH>|
-         -> Vec<(u8, u8)> {
-            cur_slice
-                .pos_to_id
-                .iter()
-                .map(|cur_piece_id| {
-                    let global_id = self.render_graph_backtrack_slice_piece_id(
-                        &mut graph.1,
-                        cur_slice_relation_pos,
-                        *cur_piece_id,
-                    );
-                    (global_id, color[global_id as usize])
-                })
-                .collect::<Vec<_>>()
-        };
+        let mut map_line =
+            |cur_slice_relation_pos: usize, cur_slice: GridSliceState<LENGTH>| -> Vec<(u8, u8)> {
+                cur_slice
+                    .pos_to_id
+                    .iter()
+                    .map(|cur_piece_id| {
+                        let global_id = self.render_graph_backtrack_slice_piece_id(
+                            &mut graph.1,
+                            cur_slice_relation_pos,
+                            *cur_piece_id,
+                        );
+                        (global_id, color[global_id as usize])
+                    })
+                    .collect::<Vec<_>>()
+            };
 
         let mut ret = Vec::new();
         ret.push(map_line(0, self.slice_relation_stack[0].0.clone()));
@@ -801,25 +800,31 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
     fn render_str(&self) -> String {
         let map = self.render_map();
 
-        map.iter().map(|line| {
-            line.iter().map(|val| {
-                format![
-                    "\x1b[3{}m{}\x1b[39;49m",
-                    match val.1 {
-                        0 => 4,
-                        1 => 1,
-                        2 => 5,
-                        3 => 2,
-                        _ => unreachable!(),
-                    },
-                    if val.0 < 10 {
-                        val.0.to_string().chars().nth(0).unwrap()
-                    } else if val.0 < 36 {
-                        std::char::from_u32(val.0 as u32 - 10 + 65).unwrap()
-                    } else { panic!("there isn't a good way to render this many pieces yet") }
-                ]
-            }).fold(String::new(), |a, b| format!["{}{}", a, b])
-        }).fold(String::new(), |a, b| format!["{}{}\n", a, b])
+        map.iter()
+            .map(|line| {
+                line.iter()
+                    .map(|val| {
+                        format![
+                            "\x1b[3{}m{}\x1b[39;49m",
+                            match val.1 {
+                                0 => 4,
+                                1 => 1,
+                                2 => 5,
+                                3 => 2,
+                                _ => unreachable!(),
+                            },
+                            if val.0 < 10 {
+                                val.0.to_string().chars().nth(0).unwrap()
+                            } else if val.0 < 36 {
+                                std::char::from_u32(val.0 as u32 - 10 + 65).unwrap()
+                            } else {
+                                panic!("there isn't a good way to render this many pieces yet")
+                            }
+                        ]
+                    })
+                    .fold(String::new(), |a, b| format!["{}{}", a, b])
+            })
+            .fold(String::new(), |a, b| format!["{}{}\n", a, b])
     }
 
     fn render(&self) {
@@ -931,7 +936,12 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         )
     }
 
-    fn solve_iter(&self, stack: &mut GridTiling<LENGTH>, tiling: &mut Vec<GridTiling<LENGTH>>, depth: usize) {
+    fn solve_iter(
+        &self,
+        stack: &mut GridTiling<LENGTH>,
+        tiling: &mut Vec<GridTiling<LENGTH>>,
+        depth: usize,
+    ) {
         if stack.len() == depth + 3 {
             let prev = stack.peek();
             let base = self.solve_base();
@@ -1285,33 +1295,49 @@ mod tests {
                 // which is de-facto a pass-by-reference
                 let render_map = &render_map;
 
-                let feas_reg = render_map.iter().enumerate().map(move |(y, row)| row.iter().enumerate().map(move |(x, val)| {
-                    (0..4).filter_map(move |dir| {
-                        match dir {
-                            0 => if y < render_map.len() - 1 && render_map[y+1][x].0 != val.0 {
-                                Some((x, y, 'U'))
-                            } else {
-                                None
-                            },
-                            1 => if y > 0 && render_map[y-1][x].0 != val.0 {
-                                Some((x, y, 'D'))
-                            } else {
-                                None
-                            },
-                            2 => if x < render_map[y].len() - 1 && render_map[y][x+1].0 != val.0 {
-                                Some((x, y, 'R'))
-                            } else {
-                                None
-                            },
-                            3 => if x > 0 && render_map[y][x-1].0 != val.0 {
-                                Some((x, y, 'L'))
-                            } else {
-                                None
-                            },
-                            _ => unreachable!()
-                        }
+                let feas_reg = render_map
+                    .iter()
+                    .enumerate()
+                    .map(move |(y, row)| {
+                        row.iter().enumerate().map(move |(x, val)| {
+                            (0..4).filter_map(move |dir| match dir {
+                                0 => {
+                                    if y < render_map.len() - 1 && render_map[y + 1][x].0 != val.0 {
+                                        Some((x, y, 'U'))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                1 => {
+                                    if y > 0 && render_map[y - 1][x].0 != val.0 {
+                                        Some((x, y, 'D'))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                2 => {
+                                    if x < render_map[y].len() - 1
+                                        && render_map[y][x + 1].0 != val.0
+                                    {
+                                        Some((x, y, 'R'))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                3 => {
+                                    if x > 0 && render_map[y][x - 1].0 != val.0 {
+                                        Some((x, y, 'L'))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => unreachable!(),
+                            })
+                        })
                     })
-                })).flatten().flatten().collect::<Vec<_>>();
+                    .flatten()
+                    .flatten()
+                    .collect::<Vec<_>>();
 
                 // note we effectively "integrate" across the difference between the top and the
                 // bottom to find the area. there are some points to take into account here
@@ -1323,7 +1349,7 @@ mod tests {
                 // need a drastically different representation of the underlying data (and,
                 // considering this is a unit test to verify correctness, i operate on an
                 // optimize-as-needed basis)
-                
+
                 // todo actually do the thing
                 panic!("feas_reg: {:#?}", &feas_reg);
                 todo!()
