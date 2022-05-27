@@ -737,7 +737,7 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         (ret, state)
     }
 
-    fn render_color(&self, graph: &Vec<(u8, u8)>) -> [u8; 8] {
+    fn render_color(&self, graph: &Vec<(u8, u8)>) -> [u8; 1024] {
         // note graph coloring is an interesting problem but its outside the scope here. we have
         // four as an upper bound for the number of colors (because of the four-color theorem, but
         // it is easier to show in the square-grid case), so we brute-force the 1, 2, 3 and 4
@@ -750,9 +750,9 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
         // (AddWithCarry) but we set the length to be the number of global ids total (the number of
         // colors, the base, is still 4 because of the four-color theorem, but the native
         // representation is a jump-table/function, so we need to scale with the size of the
-        // domain). 8 is a reasonably large number and i should find a better algorithm anyways...
+        // domain). 1024 is a reasonably large number and i should find a better algorithm anyways...
 
-        AddWithCarry::<8>::new(0, LENGTH as u8)
+        AddWithCarry::<1024>::new(0, LENGTH as u8)
             .find(|color| {
                 // verify that no two colors are connected by an edge
                 graph
@@ -812,7 +812,11 @@ impl<const LENGTH: usize> GridTiling<LENGTH> {
                         3 => 2,
                         _ => unreachable!(),
                     },
-                    val.0
+                    if val.0 < 10 {
+                        val.0.to_string().chars().nth(0).unwrap()
+                    } else if val.0 < 36 {
+                        std::char::from_u32(val.0 as u32 - 10 + 65).unwrap()
+                    } else { panic!("there isn't a good way to render this many pieces yet") }
                 ]
             }).fold(String::new(), |a, b| format!["{}{}", a, b])
         }).fold(String::new(), |a, b| format!["{}{}\n", a, b])
@@ -927,8 +931,8 @@ impl<const LENGTH: usize> Grid<LENGTH> {
         )
     }
 
-    fn solve_iter(&self, stack: &mut GridTiling<LENGTH>, tiling: &mut Vec<GridTiling<LENGTH>>) {
-        if stack.len() == LENGTH + 3 {
+    fn solve_iter(&self, stack: &mut GridTiling<LENGTH>, tiling: &mut Vec<GridTiling<LENGTH>>, depth: usize) {
+        if stack.len() == depth + 3 {
             let prev = stack.peek();
             let base = self.solve_base();
 
@@ -973,18 +977,18 @@ impl<const LENGTH: usize> Grid<LENGTH> {
                 .filter(|x| GridSliceState::non_canonical_equal(&x.0, &prev))
                 .for_each(|x| {
                     stack.push(x);
-                    self.solve_iter(stack, tiling);
+                    self.solve_iter(stack, tiling, depth);
                     stack.pop();
                 });
         }
     }
 
-    fn solve(&self) -> Vec<GridTiling<LENGTH>> {
+    fn solve(&self, depth: usize) -> Vec<GridTiling<LENGTH>> {
         let mut stack = GridTiling::new();
         let mut tiling = Vec::new();
 
         stack.push(self.solve_base());
-        self.solve_iter(&mut stack, &mut tiling);
+        self.solve_iter(&mut stack, &mut tiling, depth);
 
         println!("tilings (length = {})", tiling.len());
         tiling.iter().enumerate().for_each(|x| {
@@ -999,27 +1003,29 @@ impl<const LENGTH: usize> Grid<LENGTH> {
 fn main() {
     match std::env::args().nth(1).unwrap().as_str() {
         "render" => {
+            let depth = std::env::args().nth(3).unwrap().parse().unwrap();
+
             match std::env::args().nth(2).unwrap().parse::<u8>().unwrap() {
                 2 => {
-                    Grid::<2>::new().solve();
+                    Grid::<2>::new().solve(depth);
                 }
                 3 => {
-                    Grid::<3>::new().solve();
+                    Grid::<3>::new().solve(depth);
                 }
                 4 => {
-                    Grid::<4>::new().solve();
+                    Grid::<4>::new().solve(depth);
                 }
                 5 => {
-                    Grid::<5>::new().solve();
+                    Grid::<5>::new().solve(depth);
                 }
                 6 => {
-                    Grid::<6>::new().solve();
+                    Grid::<6>::new().solve(depth);
                 }
                 _ => unreachable!(),
             };
         }
         "scratch" => {
-            let grid = Grid::<4>::new().solve();
+            let grid = Grid::<4>::new().solve(4);
 
             println!("\n\n");
             println!("THE ONLY ONES I CARE ABOUT");
@@ -1279,7 +1285,7 @@ mod tests {
                 // which is de-facto a pass-by-reference
                 let render_map = &render_map;
 
-                let mut feas_reg = render_map.iter().enumerate().map(move |(y, row)| row.iter().enumerate().map(move |(x, val)| {
+                let feas_reg = render_map.iter().enumerate().map(move |(y, row)| row.iter().enumerate().map(move |(x, val)| {
                     (0..4).filter_map(move |dir| {
                         match dir {
                             0 => if y < render_map.len() - 1 && render_map[y+1][x].0 != val.0 {
