@@ -1439,5 +1439,4 @@ mod bench {
     bench_all! {2}
     bench_all! {3}
     bench_all! {4}
-    bench_all! {5}
 }
