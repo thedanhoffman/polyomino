@@ -1383,6 +1383,33 @@ mod tests {
 mod bench {
     use super::*;
 
+    macro_rules! bench_slice_state {
+        ($length:expr, $depth:expr) => {
+            paste!{
+                #[bench]
+                fn [<bench_slice_state_ $length _ $depth>](b: &mut test::Bencher) {
+                    b.iter(|| {
+                        Grid::<$length>::new_slice_state();
+                    });
+                }
+            }
+        }
+    }
+
+    macro_rules! bench_slice_relation {
+        ($length:expr, $depth:expr) => {
+            paste!{
+                #[bench]
+                fn [<bench_slice_relation_ $length _ $depth>](b: &mut test::Bencher) {
+                    b.iter(|| {
+                        Grid::<$length>::new_slice_relation(&Grid::<$length>::new_slice_state());
+                    });
+                }
+            }
+        }
+    }
+
+
     macro_rules! bench_solve {
         ($length:expr, $depth:expr) => {
             paste! {
@@ -1394,22 +1421,30 @@ mod bench {
         };
     }
 
+    macro_rules! bench_all {
+        ($length:expr, $depth:expr) => {
+            bench_slice_state!{$length, $depth}
+            bench_slice_relation!{$length, $depth}
+            bench_solve!{$length, $depth}
+        }
+    }
+
     // note i can throw some proc macros here but those need to be developed
     // as another crate (and its a bit pre-mature to do that now since these
     // are pushing the limit of reasonable execution times anyways)
 
-    bench_solve! {2, 2}
-    bench_solve! {2, 3}
-    bench_solve! {2, 4}
-    bench_solve! {2, 5}
+    bench_all! {2, 2}
+    bench_all! {2, 3}
+    bench_all! {2, 4}
+    bench_all! {2, 5}
 
-    bench_solve! {3, 2}
-    bench_solve! {3, 3}
-    bench_solve! {3, 4}
-    bench_solve! {3, 5}
+    bench_all! {3, 2}
+    bench_all! {3, 3}
+    bench_all! {3, 4}
+    bench_all! {3, 5}
 
-    bench_solve! {4, 2}
-    bench_solve! {4, 3}
-    bench_solve! {4, 4}
-    bench_solve! {4, 5}
+    bench_all! {4, 2}
+    bench_all! {4, 3}
+    bench_all! {4, 4}
+    bench_all! {4, 5}
 }
