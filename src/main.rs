@@ -1384,31 +1384,31 @@ mod bench {
     use super::*;
 
     macro_rules! bench_slice_state {
-        ($length:expr, $depth:expr) => {
-            paste!{
+        ($length:expr) => {
+            paste! {
                 #[bench]
-                fn [<bench_slice_state_ $length _ $depth>](b: &mut test::Bencher) {
+                fn [<bench_slice_state_ $length>](b: &mut test::Bencher) {
                     b.iter(|| {
                         Grid::<$length>::new_slice_state();
                     });
                 }
             }
-        }
+        };
     }
 
     macro_rules! bench_slice_relation {
-        ($length:expr, $depth:expr) => {
-            paste!{
+        ($length:expr) => {
+            paste! {
                 #[bench]
-                fn [<bench_slice_relation_ $length _ $depth>](b: &mut test::Bencher) {
+                fn [<bench_slice_relation_ $length>](b: &mut test::Bencher) {
+                    let slice_state = Grid::<$length>::new_slice_state();
                     b.iter(|| {
-                        Grid::<$length>::new_slice_relation(&Grid::<$length>::new_slice_state());
+                        Grid::<$length>::new_slice_relation(&slice_state);
                     });
                 }
             }
-        }
+        };
     }
-
 
     macro_rules! bench_solve {
         ($length:expr, $depth:expr) => {
@@ -1422,29 +1422,22 @@ mod bench {
     }
 
     macro_rules! bench_all {
-        ($length:expr, $depth:expr) => {
-            bench_slice_state!{$length, $depth}
-            bench_slice_relation!{$length, $depth}
-            bench_solve!{$length, $depth}
-        }
+        ($length:expr) => {
+            bench_slice_state! {$length}
+            bench_slice_relation! {$length}
+            bench_solve! {$length, 2}
+            bench_solve! {$length, 3}
+            bench_solve! {$length, 4}
+            bench_solve! {$length, 5}
+        };
     }
 
     // note i can throw some proc macros here but those need to be developed
     // as another crate (and its a bit pre-mature to do that now since these
     // are pushing the limit of reasonable execution times anyways)
 
-    bench_all! {2, 2}
-    bench_all! {2, 3}
-    bench_all! {2, 4}
-    bench_all! {2, 5}
-
-    bench_all! {3, 2}
-    bench_all! {3, 3}
-    bench_all! {3, 4}
-    bench_all! {3, 5}
-
-    bench_all! {4, 2}
-    bench_all! {4, 3}
-    bench_all! {4, 4}
-    bench_all! {4, 5}
+    bench_all! {2}
+    bench_all! {3}
+    bench_all! {4}
+    bench_all! {5}
 }
