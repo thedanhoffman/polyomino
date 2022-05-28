@@ -1,6 +1,11 @@
 #![feature(is_sorted)]
-type GridLen = u8;
+#![feature(test)]
+#![allow(soft_unstable)]
 
+extern crate test;
+use paste::paste;
+
+type GridLen = u8;
 type GridSliceStatePieceID = u8;
 
 // helper stuff
@@ -1248,7 +1253,7 @@ mod tests {
             #[test]
             fn test_trominoes_solve() {
                 let grid = Grid::<3>::new();
-                assert_eq![grid.solve().len(), 10];
+                assert_eq![grid.solve(3).len(), 10];
             }
         }
     }
@@ -1259,7 +1264,7 @@ mod tests {
         #[test]
         fn test_tetrominoes_solve() {
             let grid = Grid::<4>::new();
-            assert_eq![grid.solve().len(), 147]; // note im unsure whether this number is correct
+            assert_eq![grid.solve(4).len(), 147]; // note im unsure whether this number is correct
         }
     }
 
@@ -1271,7 +1276,7 @@ mod tests {
             // because of the render code,
             let grid = Grid::<LENGTH>::new();
 
-            assert![grid.solve().iter().all(|tiling| {
+            assert![grid.solve(LENGTH).iter().all(|tiling| {
                 let render_str = tiling.render_str();
                 let render_map = tiling.render_map();
                 println!("render_str: {:?}", &render_str);
@@ -1372,4 +1377,39 @@ mod tests {
             test_general_connected::<4>();
         }
     }
+}
+
+#[cfg(test)]
+mod bench {
+    use super::*;
+
+    macro_rules! bench_solve {
+        ($length:expr, $depth:expr) => {
+            paste! {
+            #[bench]
+            fn [<bench_solve_ $length _ $depth>](b: &mut test::Bencher) {
+                b.iter(|| Grid::<$length>::new().solve($depth));
+            }
+            }
+        };
+    }
+
+    // note i can throw some proc macros here but those need to be developed
+    // as another crate (and its a bit pre-mature to do that now since these
+    // are pushing the limit of reasonable execution times anyways)
+
+    bench_solve! {2, 2}
+    bench_solve! {2, 3}
+    bench_solve! {2, 4}
+    bench_solve! {2, 5}
+
+    bench_solve! {3, 2}
+    bench_solve! {3, 3}
+    bench_solve! {3, 4}
+    bench_solve! {3, 5}
+
+    bench_solve! {4, 2}
+    bench_solve! {4, 3}
+    bench_solve! {4, 4}
+    bench_solve! {4, 5}
 }
